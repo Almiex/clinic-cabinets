@@ -8,9 +8,6 @@ import numpy as np
 import streamlit as st
 import plotly
 
-st.write(st.__version__)
-st.write(plotly.__version__)
-
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
 # ==================== НОРМАЛИЗАЦИЯ СПЕЦИАЛИЗАЦИЙ ====================
@@ -659,6 +656,20 @@ def main():
             ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
+st.divider()
+st.write("### Тест hover")
+
+test_fig = go.Figure(
+    go.Scatter(
+        x=[1, 2, 3],
+        y=[1, 2, 3],
+        mode="markers",
+        marker=dict(size=30),
+        hovertemplate="Работает! x=%{x}<extra></extra>"
+    )
+)
+
+st.plotly_chart(test_fig)
 
 if __name__ == "__main__":
     main()
