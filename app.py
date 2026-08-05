@@ -531,24 +531,24 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
         # Операционная → "о"
         if 'операционная' in s_lower:
-            return 'оп.'
+            return 'о'
 
-        # Кабинет / стационар → аббревиатура из первых букв слов
+        # Кабинет / стационар → аббревиатура из первых букв слов, строчные, без точки
         if 'кабинет' in s_lower or 'стационар' in s_lower:
             words = name.split()
             return ''.join(w[0].lower() for w in words if w)
 
-        # Обычная фамилия
+        # Обычная фамилия — с заглавной буквы, сохраняем регистр исходника
         if len(name) >= 4 and name[1] in VOWELS and name[2] in VOWELS:
-            return name[:4].lower()          # 4 буквы, без точки
+            return name[:4]               # 4 буквы, без точки (например: Иван)
         elif len(name) >= 3 and name[2] in VOWELS:
-            return name[:2].lower() + '.'    # 2 буквы + точка
+            return name[:2] + '.'         # 2 буквы + точка (например: Ал.)
         elif len(name) >= 3:
-            return name[:3].lower() + '.'    # 3 буквы + точка
+            return name[:3] + '.'         # 3 буквы + точка (например: Тит.)
         elif len(name) == 2:
-            return name[:2].lower() + '.'
+            return name[:2] + '.'
         elif len(name) == 1:
-            return name[0].lower() + '.'
+            return name[0] + '.'
         return ''
 
     x_list, y_list, c_list, h_list, t_list = [], [], [], [], []
