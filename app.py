@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+import re
 
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
@@ -14,170 +15,6 @@ SPEC_MAP = {
     'хирургия': 'Хирургия',
     'хирург': 'Хирургия',
     'травматолог': 'Травматология',
-    'ортопед': 'Травматология',
-    'рентгенолог': 'Рентген',
-    'рентген': 'Рентген',
-    'ультразвуковой': 'УЗИ',
-    'уздг': 'УЗИ',
-    'функциональной диагностики': 'Функц. диагностика',
-    'гинеколог': 'Гинекология',
-    'акушер': 'Гинекология',
-    'уролог': 'Урология',
-    'дерматовенеролог': 'Дерматология',
-    'онколог': 'Онкология',
-    'флеболог': 'Флебология',
-    'гастроэнтеролог': 'Гастроэнтерология',
-    'отоларинголог': 'ЛОР',
-    'колопроктолог': 'Колопроктология',
-    'психолог': 'Психология',
-    'процедурные кабинеты': 'Процедурные',
-    '_процедурные кабинеты в квс': 'Процедурные',
-    'процедурные кабинеты в квс': 'Процедурные',
-    'лаборатория': 'Лаборатория',
-    'статистик': 'Администрация',
-    'дневной стационар': 'Стационар',
-}
-
-BASE_COLORS = {
-    'Терапия': '#2E86AB',
-    'Кардиология': '#A23B72',
-    'Эндокринология': '#F18F01',
-    'Неврология': '#C73E1D',
-    'Хирургия': '#E94F37',
-    'Травматология': '#F6AE2D',
-    'Рентген': '#6A4C93',
-    'УЗИ': '#9B5DE5',
-    'Функц. диагностика': '#00BBF9',
-    'Гинекология': '#F15BB5',
-    'Урология': '#3A86FF',
-    'Дерматология': '#8338EC',
-    'Онкология': '#FB5607',
-    'Флебология': '#FF006E',
-    'Гастроэнтерология': '#3A0CA3',
-    'ЛОР': '#4361EE',
-    'Колопроктология': '#7209B7',
-    'Психология': '#4CC9F0',
-    'Процедурные': '#86BBD8',
-    'Лаборатория': '#06D6A0',
-    'Администрация': '#95A5A6',
-    'Стационар': '#118AB2',
-    'Прочее': '#BDC3C7',
-    'Пусто': '#95A5A6',
-}
-
-EXTRA_PALETTE = [
-    '#264653', '#2a9d8f', '#e9c46a', '#f4a261', '#e76f51',
-    '#8ac926', '#1982c4', '#ffca3a', '#ff595e', '#8d99ae',
-    '#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#003049',
-]
-
-
-def normalize_spec(raw):
-    if pd.isna(raw):
-        return 'Прочее'
-    s = str(raw).strip().lower()
-    for key, val in SPEC_MAP.items():
-        if key in s:
-            return val
-    return 'Прочее'
-
-
-def get_display_name(full_name):
-    """Для процедурных кабинетов/мест — полное название, для врачей — фамилия."""
-    if pd.isna(full_name):
-        return ''
-    s = str(full_name).strip()
-    lower = s.lower()
-    if any(k in lower for k in ['кабинет', 'перевязочная', 'стационар', 'операционная', 'травмпункт']):
-        return s
-    parts = s.split()
-    return parts[0] if parts else s
-
-
-def assign_colors(all_specs):
-    colors = {}
-    extra_idx = 0
-    for spec in sorted(all_specs):
-        if spec in BASE_COLORS:
-            colors[spec] = BASE_COLORS[spec]
-        else:
-            colors[spec] = EXTRA_PALETTE[extra_idx % len(EXTRA_PALETTE)]
-            extra_idx += 1
-    return colors
-
-
-# ==================== ПАРСИНГ ====================
-def parse_excel_new(uploaded_file):
-    df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
-    df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
-    df = df.dropna(subset=['Дата', 'Период']).copy()
-
-    def fix_cabinet(cab):
-        if pd.isna(cab) or str(cab).strip() == '':
-            return None
-        try:
-            return str(int(float(cab)))
-        except (ValueError, TypeError):
-            return None
-
-    df['Кабинет'] = df['Кабинет'].apply(fix_cabinet)
-    df = df.dropna(subset=['Кабинет']).copy()
-
-    df['date_parsed'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y', errors='coerce')
-    df = df.dropna(subset=['date_parsed'])
-    df['date_str'] = df['date_parsed'].dt.strftime('%d.%m.%Y')
-    df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
-
-    def parse_period(p):
-        import re
-        m = re.match(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})', str(p))
-        if m:
-            h1, m1, h2, m2 = map(int, m.groups())
-            return time(h1, m1), time(h2, m2)
-        return None, None
-
-    df[['start_time', 'end_time']] = df['Период'].apply(
-        lambda x: pd.Series(parse_period(x))
-    )
-    df['spec'] = df['Специализация'].apply(normalize_spec)
-    df['display_name'] = df['Доктор'].apply(get_display_name)
-
-    def calc_hours(row):
-        if pd.notna(row['start_time']) and pd.notna(row['end_time']):
-            s = row['start_time'].hour * 60 + row['start_time'].minute
-            e = row['end_time'].hour * 60 + row['end_time'].minute
-            return max(0, (e - s) / 60)
-        return 0
-
-    df['hours'] = df.apply(calc_hours, axis=1)
-    return df
-
-
-# ==================== ВИЗУАЛИЗАЦИИ ====================
-def cabinet_sort_key(c):
-    try:
-        return (0, int(c))
-    except:
-        return (1, c)
-
-
-def add_legend(fig, colors, spec_to_code):
-    """Добавляет кастомную легенду через dummy traces."""
-    for spec in sorted(spec_to_code.keys()):
-        if spec == 'Пусто':
-            continue
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=14, color=colors.get(spec, '#999'),
-                        line=dict(width=1, color='white')),
-            name=spec,
-            showlegend=True,
-            hoverinfo='skip',
-        ))
-
-
-def create_overview
     'ортопед': 'Травматология',
     'рентгенолог': 'Рентген',
     'рентген': 'Рентген',
@@ -251,6 +88,12 @@ def get_surname(full_name):
     return parts[0] if parts else str(full_name)
 
 
+def get_full_name(full_name):
+    if pd.isna(full_name):
+        return ''
+    return str(full_name).strip()
+
+
 def assign_colors(all_specs):
     colors = {}
     extra_idx = 0
@@ -269,18 +112,13 @@ def parse_excel_new(uploaded_file):
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
     df = df.dropna(subset=['Дата', 'Период']).copy()
 
-    # Оставляем все записи, включая те, где Кабинет пустой или не число
-    # Для пустых кабинетов используем название как идентификатор
     def fix_cabinet(row):
         cab = row['Кабинет']
         if pd.isna(cab) or str(cab).strip() == '':
-            # Если кабинет пустой, используем имя доктора как идентификатор
             return str(row['Доктор']).strip()
         try:
-            # Пытаемся преобразовать в число
             return str(int(float(cab)))
         except:
-            # Если не число, оставляем как есть
             return str(cab).strip()
 
     df['Кабинет'] = df.apply(fix_cabinet, axis=1)
@@ -302,6 +140,7 @@ def parse_excel_new(uploaded_file):
     )
     df['spec'] = df['Специализация'].apply(normalize_spec)
     df['surname'] = df['Доктор'].apply(get_surname)
+    df['full_name'] = df['Доктор'].apply(get_full_name)
 
     def calc_hours(row):
         if pd.notna(row['start_time']) and pd.notna(row['end_time']):
@@ -341,32 +180,29 @@ def add_legend(fig, colors, spec_to_code):
 def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
     """Создает тепловую карту для всех кабинетов (1-25) плюс все остальные"""
     
-    # Все физические кабинеты 1-25
     physical_cabinets = [str(i) for i in range(1, 26)]
-    
-    # Все кабинеты из данных (включая процедурные и т.д.)
     all_cabinets = sorted(df['Кабинет'].unique(), key=cabinet_sort_key)
     
-    # Разделяем физические и остальные
     physical_cabs = [c for c in all_cabinets if c in physical_cabinets]
     other_cabs = [c for c in all_cabinets if c not in physical_cabinets]
     
-    # Сортируем физические по номеру, остальные оставляем как есть
     physical_cabs_sorted = sorted(physical_cabs, key=lambda x: int(x))
     all_cabs = physical_cabs_sorted + sorted(other_cabs)
     
     all_dates = sorted(selected_dates,
                        key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))
 
-    # Агрегируем
+    # Агрегируем с сохранением всех врачей и их полных имен
     if not df.empty:
         agg = df.groupby(['date_short', 'Кабинет']).agg({
             'spec': lambda x: x.mode().iloc[0] if not x.mode().empty else 'Пусто',
             'surname': lambda x: ', '.join(dict.fromkeys(x)),
+            'full_name': lambda x: ', '.join(dict.fromkeys(x)),
             'hours': 'sum',
+            'Период': lambda x: ', '.join(sorted(set(x))),
         }).reset_index()
     else:
-        agg = pd.DataFrame(columns=['date_short', 'Кабинет', 'spec', 'surname', 'hours'])
+        agg = pd.DataFrame(columns=['date_short', 'Кабинет', 'spec', 'surname', 'full_name', 'hours', 'Период'])
 
     # Полная сетка
     grid = pd.DataFrame([(d, c) for d in all_dates for c in all_cabs],
@@ -374,6 +210,8 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
     grid = grid.merge(agg, on=['date_short', 'Кабинет'], how='left')
     grid['spec'] = grid['spec'].fillna('Пусто')
     grid['surname'] = grid['surname'].fillna('Пусто')
+    grid['full_name'] = grid['full_name'].fillna('Пусто')
+    grid['Период'] = grid['Период'].fillna('Нет данных')
 
     def truncate(txt):
         if pd.isna(txt):
@@ -390,6 +228,21 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
     pivot_text = pivot_text.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
     pivot_spec = grid.pivot(index='Кабинет', columns='date_short', values='spec')
     pivot_spec = pivot_spec.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
+    pivot_fullname = grid.pivot(index='Кабинет', columns='date_short', values='full_name')
+    pivot_fullname = pivot_fullname.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
+    pivot_period = grid.pivot(index='Кабинет', columns='date_short', values='Период')
+    pivot_period = pivot_period.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
+
+    # Создаем customdata с полной информацией
+    customdata = []
+    for i in range(len(pivot_spec.index)):
+        row_data = []
+        for j in range(len(pivot_spec.columns)):
+            spec_val = pivot_spec.iloc[i, j]
+            fullname_val = pivot_fullname.iloc[i, j]
+            period_val = pivot_period.iloc[i, j]
+            row_data.append(f"{spec_val}|{fullname_val}|{period_val}")
+        customdata.append(row_data)
 
     # Цветовая шкала
     n = len(spec_to_code)
@@ -406,12 +259,14 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
         texttemplate='%{text}',
         textfont={'size': 11, 'color': 'white'},
         hovertemplate=(
-            '<b>Кабинет:</b> %{y}<br>'
-            '<b>Дата:</b> %{x}<br>'
-            '<b>Специализация:</b> %{customdata}<br>'
-            '<b>Врач(и):</b> %{text}<extra></extra>'
+            '<b>🏥 Кабинет:</b> %{y}<br>'
+            '<b>📅 Дата:</b> %{x}<br>'
+            '<b>🩺 Специализация:</b> %{customdata[0]}<br>'
+            '<b>👨‍⚕️ Врач(и):</b> %{customdata[1]}<br>'
+            '<b>⏰ Период(ы):</b> %{customdata[2]}<br>'
+            '<b>⏱ Часы:</b> %{z}<extra></extra>'
         ),
-        customdata=pivot_spec.values,
+        customdata=customdata,
         colorscale=colorscale,
         showscale=False,
         zmin=0,
@@ -497,32 +352,54 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
     z_matrix = []
     text_matrix = []
     spec_matrix = []
+    fullname_matrix = []
+    period_matrix = []
 
     for cab in all_cabs:
         cab_df = df_day[df_day['Кабинет'] == cab]
-        z_row, text_row, spec_row = [], [], []
+        z_row, text_row, spec_row, fullname_row, period_row = [], [], [], [], []
         for h in hours:
             docs = []
+            fullnames = []
             specs = []
+            periods = []
             for _, r in cab_df.iterrows():
                 if is_working(r, h):
                     docs.append(r['surname'])
+                    fullnames.append(r['full_name'])
                     specs.append(r['spec'])
+                    periods.append(r['Период'])
             if docs:
                 unique_docs = list(dict.fromkeys(docs))
+                unique_fullnames = list(dict.fromkeys(fullnames))
+                unique_periods = list(dict.fromkeys(periods))
                 txt = ', '.join(unique_docs)
                 if len(txt) > 12:
                     txt = txt[:9] + '…'
                 z_row.append(spec_to_code.get(specs[0], spec_to_code['Пусто']))
                 text_row.append(txt)
                 spec_row.append(specs[0])
+                fullname_row.append(', '.join(unique_fullnames))
+                period_row.append(', '.join(unique_periods))
             else:
                 z_row.append(spec_to_code['Пусто'])
                 text_row.append('Пусто')
                 spec_row.append('Пусто')
+                fullname_row.append('Нет данных')
+                period_row.append('Нет данных')
         z_matrix.append(z_row)
         text_matrix.append(text_row)
         spec_matrix.append(spec_row)
+        fullname_matrix.append(fullname_row)
+        period_matrix.append(period_row)
+
+    # Создаем customdata для hover
+    customdata = []
+    for i in range(len(spec_matrix)):
+        row_data = []
+        for j in range(len(spec_matrix[i])):
+            row_data.append(f"{spec_matrix[i][j]}|{fullname_matrix[i][j]}|{period_matrix[i][j]}")
+        customdata.append(row_data)
 
     fig = go.Figure(data=go.Heatmap(
         z=z_matrix,
@@ -532,12 +409,14 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
         texttemplate='%{text}',
         textfont={'size': 9, 'color': 'white'},
         hovertemplate=(
-            '<b>Кабинет:</b> %{y}<br>'
-            '<b>Время:</b> %{x}<br>'
-            '<b>Специализация:</b> %{customdata}<br>'
-            '<b>Врач:</b> %{text}<extra></extra>'
+            '<b>🏥 Кабинет:</b> %{y}<br>'
+            '<b>⏰ Время:</b> %{x}<br>'
+            '<b>🩺 Специализация:</b> %{customdata[0]}<br>'
+            '<b>👨‍⚕️ Врач(и):</b> %{customdata[1]}<br>'
+            '<b>⏰ Период(ы):</b> %{customdata[2]}<br>'
+            '<extra></extra>'
         ),
-        customdata=spec_matrix,
+        customdata=customdata,
         colorscale=colorscale,
         showscale=False,
         zmin=0,
@@ -593,7 +472,8 @@ def main():
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
         "Текст = <b>фамилия врача</b> &nbsp;|&nbsp; "
-        "Серый = <b>Пусто</b>"
+        "Серый = <b>Пусто</b> &nbsp;|&nbsp; "
+        "🖱 <b>Наведите</b> для детальной информации"
         "</p>",
         unsafe_allow_html=True,
     )
@@ -653,7 +533,6 @@ def main():
 
         st.info("📌 Отображаются все кабинеты: физические (1-25) и процедурные")
 
-        # Выбор дат
         all_dates_full = sorted(
             df['date_str'].unique(),
             key=lambda x: datetime.strptime(x, '%d.%m.%Y')
@@ -675,7 +554,6 @@ def main():
             elif date_option == "Последние 30 дней":
                 selected_dates = all_dates_short[-30:] if len(all_dates_short) >= 30 else all_dates_short
             else:
-                # Выбор диапазона
                 col1, col2 = st.columns(2)
                 with col1:
                     min_date = datetime.strptime(all_dates_short[0] + '.2026', '%d.%m.%Y')
@@ -686,15 +564,8 @@ def main():
                     default_end = datetime.strptime(all_dates_short[-1] + '.2026', '%d.%m.%Y')
                     end_date = st.date_input("Конец", default_end, max_value=max_date)
                 
-                # Создаем полный диапазон дат
-                start_str = start_date.strftime('%d.%m.%Y')
-                end_str = end_date.strftime('%d.%m.%Y')
-                
-                # Генерируем все даты в диапазоне
                 date_range = pd.date_range(start=start_date, end=end_date, freq='D')
                 all_dates_in_range = [d.strftime('%d.%m') for d in date_range]
-                
-                # Берем только те, что есть в данных
                 selected_dates = [d for d in all_dates_in_range if d in all_dates_short]
                 
                 if not selected_dates:
@@ -708,7 +579,6 @@ def main():
 
         st.divider()
         st.markdown("**🩺 Специализации:**")
-        # Показываем все специализации в 2 колонки
         specs_list = sorted([s for s in spec_to_code.keys() if s != 'Пусто'])
         for i in range(0, len(specs_list), 2):
             cols = st.columns(2)
