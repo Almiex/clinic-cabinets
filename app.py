@@ -204,13 +204,15 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             'spec': lambda x: x.mode().iloc[0] if not x.mode().empty else 'Прочее',
             'surname': lambda x: ', '.join(dict.fromkeys(x)),
             'hours': 'sum',
+            'Период': lambda x: '; '.join(dict.fromkeys(x)),
         }).reset_index()
     else:
-        agg = pd.DataFrame(columns=['date_short', 'Кабинет', 'spec', 'surname', 'hours'])
+        agg = pd.DataFrame(columns=['date_short', 'Кабинет', 'spec', 'surname', 'hours', 'Период'])
 
     grid = pd.DataFrame([(d, c) for d in all_dates for c in all_cabs],
                         columns=['date_short', 'Кабинет'])
     grid = grid.merge(agg, on=['date_short', 'Кабинет'], how='left')
+    grid['Период'] = grid['Период'].fillna('-')
 
     dates_with_data = set(df_f['date_short'].unique()) if not df_f.empty else set()
 
@@ -226,13 +228,12 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         lambda r: pd.Series(get_cell_info(r)), axis=1
     )
 
-    # --- go.Scatter: каждая ячейка — квадратный маркер ---
     x_list, y_list, c_list, h_list = [], [], [], []
     for _, row in grid.iterrows():
         x_list.append(row['date_short'])
         y_list.append(row['Кабинет'])
         spec = row['spec']
-        c_list.append(colors.get(spec, '#999'))   # ← безопасный fallback
+        c_list.append(colors.get(spec, '#999'))
         if spec == 'Нет данных':
             h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Нет данных")
         elif spec == 'Пусто':
@@ -241,6 +242,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             h_list.append(
                 f"<b>Кабинет:</b> {row['Кабинет']}<br>"
                 f"<b>Дата:</b> {row['date_short']}<br>"
+                f"<b>Время:</b> {row['Период']}<br>"
                 f"<b>Специализация:</b> {spec}<br>"
                 f"<b>Врач(и):</b> {row['surname']}<br>"
                 f"<b>Часов:</b> {row['hours']:.1f}"
@@ -275,6 +277,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         height=height,
         width=width,
         yaxis=dict(
+            type='category',               # ← только наши категории
             categoryorder='array',
             categoryarray=all_cabs,
             autorange='reversed',
@@ -346,7 +349,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                 unique_docs = list(dict.fromkeys(docs))
                 txt = ', '.join(unique_docs)
                 spec_val = specs[0]
-                c_list.append(colors.get(spec_val, '#999'))   # ← безопасный fallback
+                c_list.append(colors.get(spec_val, '#999'))
                 h_list.append(
                     f"<b>Кабинет:</b> {cab}<br>"
                     f"<b>Время:</b> {h}<br>"
@@ -361,7 +364,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
     height = max(600, len(all_cabs) * 50)
     plot_w = width - 120
     plot_h = height - 180
-    marker_size = min(plot_w / len(hours), plot_h / len(all_cabs)) * 0.92
+    marker_size = min(plot_w / len(hours), plot_h / len(all_cabs)) * 0.88   # ← чуть меньше
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -371,7 +374,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0),
+            line=dict(width=0.5, color='#CCCCCC'),   # ← тонкие серые границы
         ),
         hovertext=h_list,
         hoverinfo='text',
@@ -386,6 +389,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         height=height,
         width=width,
         yaxis=dict(
+            type='category',               # ← только наши категории
             categoryorder='array',
             categoryarray=all_cabs,
             autorange='reversed',
@@ -507,16 +511,11 @@ def main():
         if mode == "📅 Обзор по дням":
             date_opt = st.radio(
                 "Диапазон:",
-                ["Последние 7 дней", "Последние 30 дней", "Все дни", "Выбрать диапазон"],
+                ["Последние 30 дней", "Все дни", "Выбрать диапазон"],   # ← убрано 7 дней
                 index=0,
             )
             if date_opt == "Все дни":
                 selected_dates = all_dates_short
-                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
-            elif date_opt == "Последние 7 дней":
-                selected_dates = (all_dates_short[-7:]
-                                  if len(all_dates_short) >= 7
-                                  else all_dates_short)
                 date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
             elif date_opt == "Последние 30 дней":
                 selected_dates = (all_dates_short[-30:]
