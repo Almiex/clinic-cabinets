@@ -7,9 +7,9 @@ import re
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
-CELL_SIZE = 42          # размер клетки
-MARKER_SIZE = 38        # размер квадрата (чуть меньше для зазора)
-BORDER_WIDTH = 1.2
+CELL_SIZE = 46          # сторона клетки в пикселях
+MARKER_SIZE = 42        # сторона квадрата (зазор 4px)
+BORDER_WIDTH = 1.5
 BORDER_COLOR = '#444444'
 
 # ==================== НОРМАЛИЗАЦИЯ ====================
@@ -241,8 +241,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
 
     n_rows = len(all_cabs)
     n_cols = len(all_dates)
-    width = CELL_SIZE * n_cols + 140
-    height = CELL_SIZE * n_rows + 120
+    height = n_rows * CELL_SIZE + 160   # 60 top + 100 bottom
+    width = n_cols * CELL_SIZE + 120    # 80 left + 40 right
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -260,7 +260,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     ))
 
     fig.update_layout(
-        title='📅 Обзорный график',
+        title='📅 Обзорная тепловая карта',
         xaxis_title='Дата',
         yaxis_title='Кабинет',
         height=height,
@@ -283,7 +283,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
-        margin=dict(l=80, r=40, t=60, b=80),
+        margin=dict(l=80, r=40, t=60, b=100),
         showlegend=False,
     )
     return fig
@@ -339,8 +339,8 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
     n_rows = len(all_cabs)
     n_cols = len(hours)
-    width = CELL_SIZE * n_cols + 140
-    height = CELL_SIZE * n_rows + 120
+    height = n_rows * CELL_SIZE + 160
+    width = n_cols * CELL_SIZE + 120
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -407,7 +407,6 @@ SPECIAL_SPEC_MAP = {
 
 
 def create_special_overview_heatmap(df, selected_dates, colors):
-    """Обзор по дням для специальных кабинетов."""
     df_f = df[df['Кабинет'].isin(SPECIAL_CABS)].copy()
 
     all_dates = sorted(selected_dates,
@@ -464,8 +463,8 @@ def create_special_overview_heatmap(df, selected_dates, colors):
 
     n_rows = len(SPECIAL_CABS)
     n_cols = len(all_dates)
-    width = CELL_SIZE * n_cols + 320   # больше места для длинных названий
-    height = CELL_SIZE * n_rows + 120
+    height = n_rows * CELL_SIZE + 160
+    width = n_cols * CELL_SIZE + 320   # больше левый отступ
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -505,14 +504,13 @@ def create_special_overview_heatmap(df, selected_dates, colors):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
-        margin=dict(l=280, r=40, t=60, b=80),
+        margin=dict(l=280, r=40, t=60, b=100),
         showlegend=False,
     )
     return fig
 
 
 def create_special_hourly_heatmap(df, selected_date, colors):
-    """Почасовая карта для специальных кабинетов."""
     df_day = df[(df['date_str'] == selected_date) &
                 df['Кабинет'].isin(SPECIAL_CABS)].copy()
 
@@ -561,8 +559,8 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
     n_rows = len(SPECIAL_CABS)
     n_cols = len(hours)
-    width = CELL_SIZE * n_cols + 320
-    height = CELL_SIZE * n_rows + 120
+    height = n_rows * CELL_SIZE + 160
+    width = n_cols * CELL_SIZE + 320
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -610,7 +608,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
-    st.markdown("# 🏥 График загрузки кабинетов")
+    st.markdown("# 🏥 Тепловая карта загрузки кабинетов")
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
@@ -742,7 +740,7 @@ def main():
             show = show.sort_values(['date_str', 'Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
-        # --- СПЕЦКАБИНЕТЫ: тоже обзор по дням ---
+        # --- СПЕЦКАБИНЕТЫ: обзор по дням ---
         st.divider()
         st.subheader("🏥 Специальные кабинеты")
         fig_special = create_special_overview_heatmap(df, selected_dates, colors)
