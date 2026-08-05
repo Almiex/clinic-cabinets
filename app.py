@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import re
 
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
@@ -106,13 +106,18 @@ def parse_excel_new(uploaded_file):
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
     df = df.dropna(subset=['Дата', 'Период']).copy()
 
+    # Оставляем все записи, включая те, где Кабинет пустой или не число
+    # Для пустых кабинетов используем название как идентификатор
     def fix_cabinet(row):
         cab = row['Кабинет']
         if pd.isna(cab) or str(cab).strip() == '':
+            # Если кабинет пустой, используем имя доктора как идентификатор
             return str(row['Доктор']).strip()
         try:
+            # Пытаемся преобразовать в число
             return str(int(float(cab)))
         except:
+            # Если не число, оставляем как есть
             return str(cab).strip()
 
     df['Кабинет'] = df.apply(fix_cabinet, axis=1)
@@ -170,18 +175,30 @@ def add_legend(fig, colors, spec_to_code):
         ))
 
 
-def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_to_code):
-    df_f = df[df['Кабинет'].isin(selected_cabinets) &
-              df['date_short'].isin(selected_dates)].copy()
-
+def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
+    """Создает тепловую карту для всех кабинетов (1-25) плюс все остальные"""
+    
+    # Все физические кабинеты 1-25
+    physical_cabinets = [str(i) for i in range(1, 26)]
+    
+    # Все кабинеты из данных (включая процедурные и т.д.)
+    all_cabinets = sorted(df['Кабинет'].unique(), key=cabinet_sort_key)
+    
+    # Разделяем физические и остальные
+    physical_cabs = [c for c in all_cabinets if c in physical_cabinets]
+    other_cabs = [c for c in all_cabinets if c not in physical_cabinets]
+    
+    # Сортируем физические по номеру, остальные оставляем как есть
+    physical_cabs_sorted = sorted(physical_cabs, key=lambda x: int(x))
+    all_cabs = physical_cabs_sorted + sorted(other_cabs)
+    
     all_dates = sorted(selected_dates,
                        key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))
-    all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
 
     # Агрегируем
-    if not df_f.empty:
-        agg = df_f.groupby(['date_short', 'Кабинет']).agg({
-            'spec': lambda x: x.mode().iloc[0] if not x.mode().empty else 'Прочее',
+    if not df.empty:
+        agg = df.groupby(['date_short', 'Кабинет']).agg({
+            'spec': lambda x: x.mode().iloc[0] if not x.mode().empty else 'Пусто',
             'surname': lambda x: ', '.join(dict.fromkeys(x)),
             'hours': 'sum',
         }).reset_index()
@@ -279,12 +296,20 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
     return fig
 
 
-def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_code):
-    df_day = df[(df['date_str'] == selected_date) &
-                df['Кабинет'].isin(selected_cabinets)].copy()
+def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
+    """Создает почасовую карту для всех кабинетов"""
+    
+    physical_cabinets = [str(i) for i in range(1, 26)]
+    all_cabinets = sorted(df['Кабинет'].unique(), key=cabinet_sort_key)
+    
+    physical_cabs = [c for c in all_cabinets if c in physical_cabinets]
+    other_cabs = [c for c in all_cabinets if c not in physical_cabinets]
+    physical_cabs_sorted = sorted(physical_cabs, key=lambda x: int(x))
+    all_cabs = physical_cabs_sorted + sorted(other_cabs)
+    
+    df_day = df[(df['date_str'] == selected_date)].copy()
 
     hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
-    all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
 
     def time_to_min(t):
         if t is None:
@@ -463,9 +488,9 @@ def main():
             index=0,
         )
 
-    all_cabinets = [str(i) for i in range(1, 26)]
-    selected_cabinets = all_cabinets
+        st.info("📌 Отображаются все кабинеты: физические (1-25) и процедурные")
 
+        # Выбор дат
         all_dates_full = sorted(
             df['date_str'].unique(),
             key=lambda x: datetime.strptime(x, '%d.%m.%Y')
@@ -476,21 +501,43 @@ def main():
         )
 
         if mode == "📅 Обзор по дням":
-            date_opt = st.radio(
-                "Диапазон:",
-                ["Последние 7 дней", "Все дни", "Выбрать вручную"],
-                index=0,
+            date_option = st.radio(
+                "Выбор дат:",
+                ["Последние 7 дней", "Последние 30 дней", "Выбрать диапазон"],
+                index=0
             )
-            if date_opt == "Все дни":
-                selected_dates = all_dates_short
-            elif date_opt == "Последние 7 дней":
-                selected_dates = (all_dates_short[-7:]
-                                  if len(all_dates_short) >= 7
-                                  else all_dates_short)
+            
+            if date_option == "Последние 7 дней":
+                selected_dates = all_dates_short[-7:] if len(all_dates_short) >= 7 else all_dates_short
+            elif date_option == "Последние 30 дней":
+                selected_dates = all_dates_short[-30:] if len(all_dates_short) >= 30 else all_dates_short
             else:
-                selected_dates = st.multiselect(
-                    "Даты:", all_dates_short, default=all_dates_short[:7]
-                )
+                # Выбор диапазона
+                col1, col2 = st.columns(2)
+                with col1:
+                    min_date = datetime.strptime(all_dates_short[0] + '.2026', '%d.%m.%Y')
+                    default_start = datetime.strptime(all_dates_short[0] + '.2026', '%d.%m.%Y')
+                    start_date = st.date_input("Начало", default_start, min_value=min_date)
+                with col2:
+                    max_date = datetime.strptime(all_dates_short[-1] + '.2026', '%d.%m.%Y')
+                    default_end = datetime.strptime(all_dates_short[-1] + '.2026', '%d.%m.%Y')
+                    end_date = st.date_input("Конец", default_end, max_value=max_date)
+                
+                # Создаем полный диапазон дат
+                start_str = start_date.strftime('%d.%m.%Y')
+                end_str = end_date.strftime('%d.%m.%Y')
+                
+                # Генерируем все даты в диапазоне
+                date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+                all_dates_in_range = [d.strftime('%d.%m') for d in date_range]
+                
+                # Берем только те, что есть в данных
+                selected_dates = [d for d in all_dates_in_range if d in all_dates_short]
+                
+                if not selected_dates:
+                    st.warning("⚠️ В выбранном диапазоне нет данных")
+                    selected_dates = all_dates_short[-7:]
+            
             selected_date = None
         else:
             selected_date = st.selectbox("Дата:", all_dates_full)
@@ -498,16 +545,20 @@ def main():
 
         st.divider()
         st.markdown("**🩺 Специализации:**")
-        for spec in sorted(spec_to_code.keys()):
-            if spec == 'Пусто':
-                continue
-            color = colors.get(spec, '#999')
-            st.markdown(
-                f"<span style='display:inline-block; width:12px; height:12px; "
-                f"background:{color}; border-radius:2px; margin-right:6px;'>"
-                f"</span>{spec}",
-                unsafe_allow_html=True,
-            )
+        # Показываем все специализации в 2 колонки
+        specs_list = sorted([s for s in spec_to_code.keys() if s != 'Пусто'])
+        for i in range(0, len(specs_list), 2):
+            cols = st.columns(2)
+            for j in range(2):
+                if i + j < len(specs_list):
+                    spec = specs_list[i + j]
+                    color = colors.get(spec, '#999')
+                    cols[j].markdown(
+                        f"<span style='display:inline-block; width:12px; height:12px; "
+                        f"background:{color}; border-radius:2px; margin-right:6px;'>"
+                        f"</span>{spec}",
+                        unsafe_allow_html=True,
+                    )
         st.markdown(
             f"<span style='display:inline-block; width:12px; height:12px; "
             f"background:{colors['Пусто']}; border-radius:2px; margin-right:6px;'>"
@@ -517,28 +568,17 @@ def main():
 
     # ===== ОСНОВНАЯ ОБЛАСТЬ =====
     if mode == "📅 Обзор по дням":
-        if len(selected_dates) > 7:
-            st.warning(
-                "⚠️ Для обзора отображается максимум 7 дней. "
-                "Показаны последние 7 выбранных."
-            )
-            selected_dates = sorted(
-                selected_dates,
-                key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y')
-            )[-7:]
-
         st.subheader(
             f"📅 Обзор с {selected_dates[0]} по {selected_dates[-1]} "
             f"({len(selected_dates)} дн.)"
         )
         fig = create_overview_heatmap(
-            df, selected_cabinets, selected_dates, colors, spec_to_code
+            df, selected_dates, colors, spec_to_code
         )
         st.plotly_chart(fig, use_container_width=False)
 
         with st.expander("📊 Таблица данных"):
             show = df[
-                df['Кабинет'].isin(selected_cabinets) &
                 df['date_short'].isin(selected_dates)
             ][['date_str', 'Кабинет', 'Доктор', 'spec', 'Период', 'hours']]
             show = show.sort_values(['date_str', 'Кабинет', 'Период'])
@@ -546,7 +586,7 @@ def main():
     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
         fig = create_hourly_heatmap(
-            df, selected_date, selected_cabinets, colors, spec_to_code
+            df, selected_date, colors, spec_to_code
         )
         st.plotly_chart(fig, use_container_width=False)
 
@@ -560,7 +600,7 @@ def main():
             st.metric("Всего часов", round(df_day['hours'].sum(), 1))
 
         with st.expander("📊 Таблица данных за день"):
-            show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
+            show = df_day[
                 ['Кабинет', 'Доктор', 'spec', 'Период', 'hours']
             ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
