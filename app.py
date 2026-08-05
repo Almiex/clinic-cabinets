@@ -391,6 +391,132 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
     return fig
 
 
+# ==================== НОВАЯ ФУНКЦИЯ: СПЕЦИАЛЬНЫЕ КАБИНЕТЫ ====================
+def create_special_hourly_heatmap(df, selected_date, colors):
+    """Почасовая карта для специальных (безномерных) кабинетов."""
+    special_cabs = [
+        "Кабинет забора мазков",
+        "Кабинет повторных приемов",
+        "Травмпункт Перевязочная Северная",
+        "Кабинет описания ЭКГ .",
+        "Кабинет описания Холтеров и СМАДов",
+        "Кабинет описания спирографии",
+    ]
+    special_spec_map = {
+        "Кабинет забора мазков": "Процедурные",
+        "Кабинет повторных приемов": "Процедурные",
+        "Травмпункт Перевязочная Северная": "Травматология",
+        "Кабинет описания ЭКГ .": "Процедурные",
+        "Кабинет описания Холтеров и СМАДов": "Процедурные",
+        "Кабинет описания спирографии": "Процедурные",
+    }
+
+    df_day = df[(df['date_str'] == selected_date) &
+                df['Кабинет'].isin(special_cabs)].copy()
+
+    hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
+
+    def time_to_min(t):
+        if t is None:
+            return None
+        return t.hour * 60 + t.minute
+
+    def is_working(row, time_str):
+        if pd.isna(row['start_time']) or pd.isna(row['end_time']):
+            return False
+        h, m = map(int, time_str.split(':'))
+        minutes = h * 60 + m
+        start = time_to_min(row['start_time'])
+        end = time_to_min(row['end_time'])
+        return start <= minutes < end
+
+    x_list, y_list, c_list, h_list = [], [], [], []
+    for cab in special_cabs:
+        cab_df = df_day[df_day['Кабинет'] == cab]
+        for hr in hours:
+            docs = []
+            specs = []
+            for _, r in cab_df.iterrows():
+                if is_working(r, hr):
+                    docs.append(r['surname'])
+                    specs.append(r['spec'])
+            x_list.append(hr)
+            y_list.append(cab)
+            if docs:
+                unique_docs = list(dict.fromkeys(docs))
+                txt = ', '.join(unique_docs)
+                spec_val = specs[0] if specs else special_spec_map[cab]
+                c_list.append(colors.get(spec_val, '#999'))
+                h_list.append(
+                    f"<b>Кабинет:</b> {cab}<br>"
+                    f"<b>Время:</b> {hr}<br>"
+                    f"<b>Специализация:</b> {spec_val}<br>"
+                    f"<b>Врач:</b> {txt}"
+                )
+            else:
+                spec_val = special_spec_map[cab]
+                c_list.append(colors.get(spec_val, '#999'))
+                h_list.append(
+                    f"<b>Кабинет:</b> {cab}<br>"
+                    f"<b>Время:</b> {hr}<br>"
+                    f"<b>Специализация:</b> {spec_val}<br>"
+                    f"Пусто"
+                )
+
+    width = 1450
+    height = max(400, len(special_cabs) * 65)
+    plot_w = width - 120
+    plot_h = height - 180
+    marker_size = min(plot_w / len(hours), plot_h / len(special_cabs)) * 0.88
+
+    fig = go.Figure(data=go.Scatter(
+        x=x_list,
+        y=y_list,
+        mode='markers',
+        marker=dict(
+            symbol='square',
+            size=marker_size,
+            color=c_list,
+            line=dict(width=0.5, color='#CCCCCC'),
+        ),
+        hovertext=h_list,
+        hoverinfo='text',
+        showlegend=False,
+    ))
+
+    fig.update_layout(
+        title=f'🏥 Специальные кабинеты — {selected_date}',
+        xaxis_title='Время',
+        yaxis_title='Кабинет',
+        height=height,
+        width=width,
+        yaxis=dict(
+            type='category',
+            categoryorder='array',
+            categoryarray=special_cabs,
+            dtick=1,
+            showgrid=True,
+            gridcolor='#E0E0E0',
+            gridwidth=1,
+        ),
+        xaxis=dict(
+            categoryorder='array',
+            categoryarray=hours,
+            dtick=1,
+            showgrid=True,
+            gridcolor='#E0E0E0',
+            gridwidth=1,
+            tickangle=45,
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(size=12),
+        margin=dict(l=300, r=40, t=80, b=100),  # увеличен левый отступ для длинных названий
+        showlegend=False,
+    )
+    return fig
+
+
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
     st.markdown("# 🏥 Тепловая карта загрузки кабинетов")
@@ -441,7 +567,7 @@ def main():
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
-        # 1. Детально по часам — первый и по умолчанию
+        # Детально по часам — первый и по умолчанию
         mode = st.radio(
             "Режим:",
             ["⏰ Детально по часам", "📅 Обзор по дням"],
@@ -460,7 +586,6 @@ def main():
         )
 
         if mode == "📅 Обзор по дням":
-            # 2. Только выбор диапазона + подсказка
             st.caption("💡 Для корректного отображения выбирайте диапазон до 40 дней")
             
             if len(all_dates_full) > 0:
@@ -497,7 +622,6 @@ def main():
         st.divider()
         st.markdown("**🩺 Специализации:**")
         for spec in sorted(spec_to_code.keys()):
-            # 3. Скрыть Администрацию
             if spec in ('Пусто', 'Нет данных', 'Администрация'):
                 continue
             color = colors.get(spec, '#999')
@@ -520,6 +644,7 @@ def main():
             unsafe_allow_html=True,
         )
 
+    # ===== ОСНОВНАЯ ОБЛАСТЬ =====
     if mode == "📅 Обзор по дням":
         st.subheader(
             f"📅 Обзор с {date_range_label} "
@@ -537,6 +662,21 @@ def main():
             ][['date_str', 'Кабинет', 'Доктор', 'spec', 'Период', 'hours']]
             show = show.sort_values(['date_str', 'Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
+
+        # --- СПЕЦИАЛЬНЫЕ КАБИНЕТЫ (последняя дата диапазона) ---
+        st.divider()
+        st.subheader("🏥 Специальные кабинеты")
+        last_short = selected_dates[-1] if selected_dates else None
+        if last_short:
+            matching = df[df['date_short'] == last_short]['date_str'].unique()
+            special_date = matching[0] if len(matching) > 0 else None
+        else:
+            special_date = None
+        
+        if special_date:
+            fig_special = create_special_hourly_heatmap(df, special_date, colors)
+            st.plotly_chart(fig_special, use_container_width=False)
+
     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
         fig = create_hourly_heatmap(
@@ -550,6 +690,12 @@ def main():
                 ['Кабинет', 'Доктор', 'spec', 'Период', 'hours']
             ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
+
+        # --- СПЕЦИАЛЬНЫЕ КАБИНЕТЫ (та же выбранная дата) ---
+        st.divider()
+        st.subheader("🏥 Специальные кабинеты")
+        fig_special = create_special_hourly_heatmap(df, selected_date, colors)
+        st.plotly_chart(fig_special, use_container_width=False)
 
 
 if __name__ == "__main__":
