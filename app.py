@@ -425,9 +425,14 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 txt = ', '.join(unique_docs)
                 spec_val = specs[0]
                 c_list.append(colors.get(spec_val, '#999'))
-                # первая буква первой фамилии
-                first_letter = unique_docs[0][0].upper() if unique_docs[0] else ''
+
+                # --- ИСКЛЮЧЕНИЕ: если ФИО содержит "Кабинет " — буква не показывается ---
+                first_letter = ''
+                if unique_docs[0] and 'Кабинет ' not in unique_docs[0]:
+                    first_letter = unique_docs[0][0].upper()
                 t_list.append(first_letter)
+                # -----------------------------------------------------------------------
+
                 h_list.append(
                     f"<b>Кабинет:</b> {cab}<br>"
                     f"<b>Время:</b> {h}<br>"
