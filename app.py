@@ -119,15 +119,14 @@ def assign_colors(all_specs):
 
 
 # ==================== ПАРСИНГ ====================
- def parse_excel_new(uploaded_file):
-     try:
-         df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=6)
-   except Exception:
+def parse_excel_new(uploaded_file):
+    try:
+        df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=6)
+    except Exception:
         df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
     
-     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
-     df = df.dropna(subset=['Дата', 'Период']).copy()
-
+    df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
+    df = df.dropna(subset=['Дата', 'Период']).copy()
 
     def fix_cabinet(row):
         cab = row['Кабинет']
@@ -267,35 +266,19 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         pos = code / max(n - 1, 1)
         colorscale.append([pos, colors[spec]])
 
-    # fig = go.Figure(data=go.Heatmap(
-    #     z=pivot_code.values,
-    #     x=all_dates,
-    #     y=all_cabs,
-    #     hovertext=hover_text,
-    #     hoverinfo='text',
-    #     colorscale=colorscale,
-    #     showscale=False,
-    #     zmin=0,
-    #     zmax=n - 1,
-    #     xgap=2,
-    #     ygap=2,
-    # ))
-
     fig = go.Figure(data=go.Heatmap(
-    z=pivot_code.values,
-    x=all_dates,
-    y=all_cabs,
-    text=hover_text,                  # Передаем массив строк сюда
-    hoverinfo='text',                 # Теперь 'text' указывает на параметр text
-    # Альтернативный вариант (более красивый):
-    # hovertemplate='%{text}<extra></extra>', 
-    colorscale=colorscale,
-    showscale=False,
-    zmin=0,
-    zmax=n - 1,
-    xgap=2,
-    ygap=2
-))
+        z=pivot_code.values,
+        x=all_dates,
+        y=all_cabs,
+        hovertext=hover_text,
+        hoverinfo='text',
+        colorscale=colorscale,
+        showscale=False,
+        zmin=0,
+        zmax=n - 1,
+        xgap=2,
+        ygap=2,
+    ))
 
     add_legend(fig, colors, spec_to_code)
 
@@ -395,33 +378,19 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         z_matrix.append(z_row)
         hover_matrix.append(hover_row)
 
-    # fig = go.Figure(data=go.Heatmap(
-    #     z=z_matrix,
-    #     x=hours,
-    #     y=all_cabs,
-    #     hovertext=hover_matrix,
-    #     hoverinfo='text',
-    #     colorscale=colorscale,
-    #     showscale=False,
-    #     zmin=0,
-    #     zmax=n - 1,
-    #     xgap=1,
-    #     ygap=2,
-    # ))
-
     fig = go.Figure(data=go.Heatmap(
-    z=z_matrix,
-    x=hours,
-    y=all_cabs,
-    text=hover_matrix,                # Привязываем матрицу часов сюда
-    hoverinfo='text',                 # Включаем чтение из параметра text
-    colorscale=colorscale,
-    showscale=False,
-    zmin=0,
-    zmax=n - 1,
-    xgap=1,
-    ygap=2
-))
+        z=z_matrix,
+        x=hours,
+        y=all_cabs,
+        hovertext=hover_matrix,
+        hoverinfo='text',
+        colorscale=colorscale,
+        showscale=False,
+        zmin=0,
+        zmax=n - 1,
+        xgap=1,
+        ygap=2,
+    ))
 
     add_legend(fig, colors, spec_to_code)
 
