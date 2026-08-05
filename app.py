@@ -351,7 +351,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
             return name[0] + '.'
         return ''
 
-    # === 1. Собираем записи по каждой клетке (кабинет, час) ===
+    # === 1. Собираем записи по каждой клетке ===
     cell_data = {}
     for _, r in df_day.iterrows():
         for h in hours:
@@ -359,30 +359,83 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 key = (r['Кабинет'], h)
                 cell_data.setdefault(key, []).append(r)
 
-    # === 2. Разрешаем конфликты и формируем клетки для отображения ===
+    # === 2. Определяем, какие кабинеты нужно разделить на весь день ===
+    needs_split = set()
+    for (cab, h), entries in cell_data.items():
+        if len(entries) > 1 and any(is_special(e['surname']) for e in entries):
+            needs_split.add(cab)
+
+    # === 3. Формируем клетки ===
     display_cells = []
 
     for (cab, h), entries in cell_data.items():
-        if len(entries) == 1:
-            r = entries[0]
-            display_cells.append({
-                'x': h,
-                'y': str(cab),
-                'color': colors.get(r['spec'], '#999'),
-                'text': abbreviate(r['surname']),
-                'hover': (
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Время:</b> {h}<br>"
-                    f"<b>Специализация:</b> {r['spec']}<br>"
-                    f"<b>Врач:</b> {r['surname']}"
-                )
-            })
-        else:
-            special = [(i, e) for i, e in enumerate(entries) if is_special(e['surname'])]
-            normal = [(i, e) for i, e in enumerate(entries) if not is_special(e['surname'])]
+        if cab in needs_split:
+            special = [e for e in entries if is_special(e['surname'])]
+            normal = [e for e in entries if not is_special(e['surname'])]
 
-            if not special:
-                # Нет специальных записей — показываем агрегат (как раньше)
+            used_normals = set()
+            sub_idx = 1
+
+            for s_entry in special:
+                matching = []
+                for n_entry in normal:
+                    if n_entry.name not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
+                        matching.append(n_entry)
+                        used_normals.add(n_entry.name)
+
+                docs = [s_entry['surname']] + [m['surname'] for m in matching]
+                docs_unique = list(dict.fromkeys(docs))
+                txt = ', '.join(docs_unique)
+
+                display_cells.append({
+                    'x': h,
+                    'y': f"{cab}.{sub_idx}",
+                    'color': colors.get(s_entry['spec'], '#999'),
+                    'text': abbreviate(s_entry['surname']),
+                    'hover': (
+                        f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
+                        f"<b>Время:</b> {h}<br>"
+                        f"<b>Специализация:</b> {s_entry['spec']}<br>"
+                        f"<b>Врач:</b> {txt}"
+                    )
+                })
+                sub_idx += 1
+
+            unused = [e for e in normal if e.name not in used_normals]
+            if unused:
+                specs = [u['spec'] for u in unused]
+                docs = list(dict.fromkeys([u['surname'] for u in unused]))
+                txt = ', '.join(docs)
+
+                display_cells.append({
+                    'x': h,
+                    'y': f"{cab}.{sub_idx}",
+                    'color': colors.get(specs[0], '#999'),
+                    'text': abbreviate(unused[0]['surname']),
+                    'hover': (
+                        f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
+                        f"<b>Время:</b> {h}<br>"
+                        f"<b>Специализация:</b> {specs[0]}<br>"
+                        f"<b>Врач:</b> {txt}"
+                    )
+                })
+
+        else:
+            if len(entries) == 1:
+                r = entries[0]
+                display_cells.append({
+                    'x': h,
+                    'y': str(cab),
+                    'color': colors.get(r['spec'], '#999'),
+                    'text': abbreviate(r['surname']),
+                    'hover': (
+                        f"<b>Кабинет:</b> {cab}<br>"
+                        f"<b>Время:</b> {h}<br>"
+                        f"<b>Специализация:</b> {r['spec']}<br>"
+                        f"<b>Врач:</b> {r['surname']}"
+                    )
+                })
+            else:
                 r = entries[0]
                 docs = list(dict.fromkeys([e['surname'] for e in entries]))
                 txt = ', '.join(docs)
@@ -398,61 +451,14 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                         f"<b>Врач:</b> {txt}"
                     )
                 })
-            else:
-                # Разделяем на под-кабинеты
-                used_normals = set()
-                sub_idx = 1
 
-                for _, s_entry in special:
-                    # Ищем обычных врачей со совпадающей специализацией
-                    matching = []
-                    for n_idx, n_entry in normal:
-                        if n_idx not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
-                            matching.append(n_entry)
-                            used_normals.add(n_idx)
+    # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
+    base_cabs = set(str(c) for c in selected_cabinets)
+    split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
+    final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
+    all_display_y = sorted(final_cabs, key=cabinet_sort_key)
 
-                    docs_list = [s_entry['surname']] + [m['surname'] for m in matching]
-                    docs_unique = list(dict.fromkeys(docs_list))
-                    txt = ', '.join(docs_unique)
-
-                    display_cells.append({
-                        'x': h,
-                        'y': f"{cab}.{sub_idx}",
-                        'color': colors.get(s_entry['spec'], '#999'),
-                        'text': abbreviate(s_entry['surname']),
-                        'hover': (
-                            f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-                            f"<b>Время:</b> {h}<br>"
-                            f"<b>Специализация:</b> {s_entry['spec']}<br>"
-                            f"<b>Врач:</b> {txt}"
-                        )
-                    })
-                    sub_idx += 1
-
-                # Оставшиеся несовпадающие врачи — в отдельный под-кабинет
-                unused = [e for i, e in normal if i not in used_normals]
-                if unused:
-                    specs = [u['spec'] for u in unused]
-                    docs = list(dict.fromkeys([u['surname'] for u in unused]))
-                    txt = ', '.join(docs)
-                    display_cells.append({
-                        'x': h,
-                        'y': f"{cab}.{sub_idx}",
-                        'color': colors.get(specs[0], '#999'),
-                        'text': abbreviate(unused[0]['surname']),
-                        'hover': (
-                            f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-                            f"<b>Время:</b> {h}<br>"
-                            f"<b>Специализация:</b> {specs[0]}<br>"
-                            f"<b>Врач:</b> {txt}"
-                        )
-                    })
-
-    # === 3. Добавляем пустые клетки ===
-    all_display_y = sorted(
-        set(str(c) for c in selected_cabinets) | set(c['y'] for c in display_cells),
-        key=cabinet_sort_key
-    )
+    # === 5. Пустые клетки ===
     filled = set((c['x'], c['y']) for c in display_cells)
     for cab in all_display_y:
         for h in hours:
@@ -465,7 +471,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                     'hover': f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто"
                 })
 
-    # Сортируем для корректного порядка точек
     display_cells.sort(key=lambda c: (cabinet_sort_key(c['y']), c['x']))
 
     x_list = [c['x'] for c in display_cells]
@@ -491,10 +496,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         ),
         text=t_list,
         textposition='middle center',
-        textfont=dict(
-            size=13,
-            color='white',
-        ),
+        textfont=dict(size=13, color='white'),
         hovertext=h_list,
         hoverinfo='text',
         showlegend=False,
