@@ -310,7 +310,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         end = time_to_min(row['end_time'])
         return start <= minutes < end
 
-    VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯьъ'
+    VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ'
 
     def abbreviate(name):
         if not name:
@@ -319,7 +319,11 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
         # Операционная → "о"
         if 'операционная' in s_lower:
-            return 'оп.'
+            return 'о'
+
+        # Перевязочная → "пк."
+        if 'перевязочная' in s_lower:
+            return 'пк.'
 
         # Кабинет / стационар → аббревиатура из первых букв слов, строчные, без точки
         if 'кабинет' in s_lower or 'стационар' in s_lower:
