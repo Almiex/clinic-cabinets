@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime, time, timedelta
 import re
 
-st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
+st.set_page_config(page_title="График кабинетов", layout="wide")
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46          # сторона клетки в пикселях
@@ -260,7 +260,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     ))
 
     fig.update_layout(
-        title='📅 Обзорная тепловая карта',
+        title='📅 Обзорный график',
         xaxis_title='Дата',
         yaxis_title='Кабинет',
         height=height,
@@ -289,6 +289,104 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     return fig
 
 
+# def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
+#     df_day = df[(df['date_str'] == selected_date) &
+#                 df['Кабинет'].isin(selected_cabinets)].copy()
+
+#     hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
+#     all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
+
+#     def time_to_min(t):
+#         if t is None:
+#             return None
+#         return t.hour * 60 + t.minute
+
+#     def is_working(row, time_str):
+#         if pd.isna(row['start_time']) or pd.isna(row['end_time']):
+#             return False
+#         h, m = map(int, time_str.split(':'))
+#         minutes = h * 60 + m
+#         start = time_to_min(row['start_time'])
+#         end = time_to_min(row['end_time'])
+#         return start <= minutes < end
+
+#     x_list, y_list, c_list, h_list = [], [], [], []
+#     for cab in all_cabs:
+#         cab_df = df_day[df_day['Кабинет'] == cab]
+#         for h in hours:
+#             docs = []
+#             specs = []
+#             for _, r in cab_df.iterrows():
+#                 if is_working(r, h):
+#                     docs.append(r['surname'])
+#                     specs.append(r['spec'])
+#             x_list.append(h)
+#             y_list.append(cab)
+#             if docs:
+#                 unique_docs = list(dict.fromkeys(docs))
+#                 txt = ', '.join(unique_docs)
+#                 spec_val = specs[0]
+#                 c_list.append(colors.get(spec_val, '#999'))
+#                 h_list.append(
+#                     f"<b>Кабинет:</b> {cab}<br>"
+#                     f"<b>Время:</b> {h}<br>"
+#                     f"<b>Специализация:</b> {spec_val}<br>"
+#                     f"<b>Врач:</b> {txt}"
+#                 )
+#             else:
+#                 c_list.append(colors.get('Пусто', '#999'))
+#                 h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто")
+
+#     n_rows = len(all_cabs)
+#     n_cols = len(hours)
+#     height = n_rows * CELL_SIZE + 160
+#     width = n_cols * CELL_SIZE + 120
+
+#     fig = go.Figure(data=go.Scatter(
+#         x=x_list,
+#         y=y_list,
+#         mode='markers',
+#         marker=dict(
+#             symbol='square',
+#             size=MARKER_SIZE,
+#             color=c_list,
+#             line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
+#         ),
+#         hovertext=h_list,
+#         hoverinfo='text',
+#         showlegend=False,
+#     ))
+
+#     fig.update_layout(
+#         title=f'⏰ Почасовая карта — {selected_date}',
+#         xaxis_title='Время',
+#         yaxis_title='Кабинет',
+#         height=height,
+#         width=width,
+#         yaxis=dict(
+#             type='category',
+#             categoryorder='array',
+#             categoryarray=all_cabs,
+#             autorange='reversed',
+#             dtick=1,
+#             showgrid=False,
+#         ),
+#         xaxis=dict(
+#             categoryorder='array',
+#             categoryarray=hours,
+#             dtick=1,
+#             showgrid=False,
+#             tickangle=45,
+#         ),
+#         plot_bgcolor='white',
+#         paper_bgcolor='white',
+#         font=dict(size=12),
+#         margin=dict(l=80, r=40, t=60, b=100),
+#         showlegend=False,
+#     )
+#     return fig
+
+
 def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     df_day = df[(df['date_str'] == selected_date) &
                 df['Кабинет'].isin(selected_cabinets)].copy()
@@ -310,7 +408,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         end = time_to_min(row['end_time'])
         return start <= minutes < end
 
-    x_list, y_list, c_list, h_list = [], [], [], []
+    x_list, y_list, c_list, h_list, t_list = [], [], [], [], []
     for cab in all_cabs:
         cab_df = df_day[df_day['Кабинет'] == cab]
         for h in hours:
@@ -327,6 +425,9 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 txt = ', '.join(unique_docs)
                 spec_val = specs[0]
                 c_list.append(colors.get(spec_val, '#999'))
+                # первая буква первой фамилии
+                first_letter = unique_docs[0][0].upper() if unique_docs[0] else ''
+                t_list.append(first_letter)
                 h_list.append(
                     f"<b>Кабинет:</b> {cab}<br>"
                     f"<b>Время:</b> {h}<br>"
@@ -335,6 +436,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 )
             else:
                 c_list.append(colors.get('Пусто', '#999'))
+                t_list.append('')
                 h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто")
 
     n_rows = len(all_cabs)
@@ -345,12 +447,19 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     fig = go.Figure(data=go.Scatter(
         x=x_list,
         y=y_list,
-        mode='markers',
+        mode='markers+text',
         marker=dict(
             symbol='square',
             size=MARKER_SIZE,
             color=c_list,
             line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
+        ),
+        text=t_list,
+        textposition='middle center',
+        textfont=dict(
+            size=14,
+            color='white',
+            family='Arial Black, sans-serif',
         ),
         hovertext=h_list,
         hoverinfo='text',
@@ -608,7 +717,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
-    st.markdown("# 🏥 Тепловая карта загрузки кабинетов")
+    st.markdown("# 🏥 График загрузки кабинетов")
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
