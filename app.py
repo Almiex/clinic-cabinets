@@ -212,6 +212,7 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
     grid['surname'] = grid['surname'].fillna('Пусто')
     grid['full_name'] = grid['full_name'].fillna('Пусто')
     grid['Период'] = grid['Период'].fillna('Нет данных')
+    grid['hours'] = grid['hours'].fillna(0)
 
     def truncate(txt):
         if pd.isna(txt):
@@ -221,19 +222,25 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
 
     grid['cell_text'] = grid['surname'].apply(truncate)
     grid['code'] = grid['spec'].map(lambda s: spec_to_code.get(s, spec_to_code['Пусто']))
+    
+    # Создаем текст для тултипа
+    grid['hover_text'] = grid.apply(
+        lambda row: (
+            f"Кабинет: {row['Кабинет']}<br>"
+            f"Дата: {row['date_short']}<br>"
+            f"Специализация: {row['spec']}<br>"
+            f"Врач(и): {row['full_name']}<br>"
+            f"Период(ы): {row['Период']}<br>"
+            f"Часы: {row['hours']:.1f}"
+        ), axis=1
+    )
 
     pivot_code = grid.pivot(index='Кабинет', columns='date_short', values='code')
     pivot_code = pivot_code.reindex(index=all_cabs, columns=all_dates)
     pivot_text = grid.pivot(index='Кабинет', columns='date_short', values='cell_text')
     pivot_text = pivot_text.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
-    pivot_spec = grid.pivot(index='Кабинет', columns='date_short', values='spec')
-    pivot_spec = pivot_spec.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
-    pivot_fullname = grid.pivot(index='Кабинет', columns='date_short', values='full_name')
-    pivot_fullname = pivot_fullname.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
-    pivot_period = grid.pivot(index='Кабинет', columns='date_short', values='Период')
-    pivot_period = pivot_period.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
-    pivot_hours = grid.pivot(index='Кабинет', columns='date_short', values='hours')
-    pivot_hours = pivot_hours.reindex(index=all_cabs, columns=all_dates).fillna(0)
+    pivot_hover = grid.pivot(index='Кабинет', columns='date_short', values='hover_text')
+    pivot_hover = pivot_hover.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
 
     # Цветовая шкала
     n = len(spec_to_code)
@@ -248,22 +255,9 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
         y=pivot_code.index,
         text=pivot_text.values,
         texttemplate='%{text}',
-        textfont={'size': 11, 'color': 'white'},
-        hovertemplate=(
-            '<b>🏥 Кабинет:</b> %{y}<br>' +
-            '<b>📅 Дата:</b> %{x}<br>' +
-            '<b>🩺 Специализация:</b> %{customdata[0]}<br>' +
-            '<b>👨‍⚕️ Врач(и):</b> %{customdata[1]}<br>' +
-            '<b>⏰ Период(ы):</b> %{customdata[2]}<br>' +
-            '<b>⏱ Часы:</b> %{customdata[3]:.1f}<br>' +
-            '<extra></extra>'
-        ),
-        customdata=list(zip(
-            pivot_spec.values.flatten(),
-            pivot_fullname.values.flatten(),
-            pivot_period.values.flatten(),
-            pivot_hours.values.flatten()
-        )),
+        textfont={'size': 10, 'color': 'white'},
+        hovertext=pivot_hover.values,
+        hovertemplate='%{hovertext}<extra></extra>',
         colorscale=colorscale,
         showscale=False,
         zmin=0,
@@ -280,6 +274,7 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
         yaxis_title='Кабинет',
         height=max(500, len(all_cabs) * 48),
         width=max(900, len(all_dates) * 140),
+        hovermode='closest',
         yaxis={
             'categoryorder': 'array',
             'categoryarray': all_cabs[::-1],
@@ -348,13 +343,11 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
 
     z_matrix = []
     text_matrix = []
-    spec_matrix = []
-    fullname_matrix = []
-    period_matrix = []
+    hover_matrix = []
 
     for cab in all_cabs:
         cab_df = df_day[df_day['Кабинет'] == cab]
-        z_row, text_row, spec_row, fullname_row, period_row = [], [], [], [], []
+        z_row, text_row, hover_row = [], [], []
         for h in hours:
             docs = []
             fullnames = []
@@ -375,20 +368,20 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
                     txt = txt[:9] + '…'
                 z_row.append(spec_to_code.get(specs[0], spec_to_code['Пусто']))
                 text_row.append(txt)
-                spec_row.append(specs[0])
-                fullname_row.append(', '.join(unique_fullnames))
-                period_row.append(', '.join(unique_periods))
+                hover_row.append(
+                    f"Кабинет: {cab}<br>"
+                    f"Время: {h}<br>"
+                    f"Специализация: {specs[0]}<br>"
+                    f"Врач(и): {', '.join(unique_fullnames)}<br>"
+                    f"Период(ы): {', '.join(unique_periods)}"
+                )
             else:
                 z_row.append(spec_to_code['Пусто'])
                 text_row.append('Пусто')
-                spec_row.append('Пусто')
-                fullname_row.append('Нет данных')
-                period_row.append('Нет данных')
+                hover_row.append(f"Кабинет: {cab}<br>Время: {h}<br>Нет данных")
         z_matrix.append(z_row)
         text_matrix.append(text_row)
-        spec_matrix.append(spec_row)
-        fullname_matrix.append(fullname_row)
-        period_matrix.append(period_row)
+        hover_matrix.append(hover_row)
 
     fig = go.Figure(data=go.Heatmap(
         z=z_matrix,
@@ -397,19 +390,8 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
         text=text_matrix,
         texttemplate='%{text}',
         textfont={'size': 9, 'color': 'white'},
-        hovertemplate=(
-            '<b>🏥 Кабинет:</b> %{y}<br>' +
-            '<b>⏰ Время:</b> %{x}<br>' +
-            '<b>🩺 Специализация:</b> %{customdata[0]}<br>' +
-            '<b>👨‍⚕️ Врач(и):</b> %{customdata[1]}<br>' +
-            '<b>⏰ Период(ы):</b> %{customdata[2]}<br>' +
-            '<extra></extra>'
-        ),
-        customdata=list(zip(
-            [item for sublist in spec_matrix for item in sublist],
-            [item for sublist in fullname_matrix for item in sublist],
-            [item for sublist in period_matrix for item in sublist]
-        )),
+        hovertext=hover_matrix,
+        hovertemplate='%{hovertext}<extra></extra>',
         colorscale=colorscale,
         showscale=False,
         zmin=0,
@@ -426,6 +408,7 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
         yaxis_title='Кабинет',
         height=max(520, len(all_cabs) * 48),
         width=1450,
+        hovermode='closest',
         yaxis={
             'categoryorder': 'array',
             'categoryarray': all_cabs[::-1],
@@ -601,7 +584,7 @@ def main():
         fig = create_overview_heatmap(
             df, selected_dates, colors, spec_to_code
         )
-        st.plotly_chart(fig, use_container_width=False)
+        st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': True, 'responsive': True})
 
         with st.expander("📊 Таблица данных"):
             show = df[
@@ -614,7 +597,7 @@ def main():
         fig = create_hourly_heatmap(
             df, selected_date, colors, spec_to_code
         )
-        st.plotly_chart(fig, use_container_width=False)
+        st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': True, 'responsive': True})
 
         df_day = df[df['date_str'] == selected_date]
         c1, c2, c3 = st.columns(3)
