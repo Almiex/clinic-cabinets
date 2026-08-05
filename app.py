@@ -270,8 +270,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         z=pivot_code.values,
         x=all_dates,
         y=all_cabs,
-        hovertext=hover_text,
-        hoverinfo='text',
+        text=hover_text,
+  hoverinfo='text',
         colorscale=colorscale,
         showscale=False,
         zmin=0,
@@ -379,16 +379,24 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         hover_matrix.append(hover_row)
 
     fig = go.Figure(data=go.Heatmap(
-        z=z_matrix,
-        x=hours,
-        y=all_cabs,
-        hovertext=hover_matrix,
-        hoverinfo='text',
+        z=pivot_code.values,
+        x=pivot_code.columns,
+        y=pivot_code.index,
+        text=pivot_text.values,
+        texttemplate='%{text}',
+        textfont={'size': 11, 'color': 'white'},
+        hovertemplate=(
+            '<b>Кабинет:</b> %{y}<br>'
+            '<b>Дата:</b> %{x}<br>'
+            '<b>Специализация:</b> %{customdata}<br>'
+            '<b>Врач(и):</b> %{text}<extra></extra>'
+        ),
+        customdata=pivot_spec.values,
         colorscale=colorscale,
         showscale=False,
         zmin=0,
         zmax=n - 1,
-        xgap=1,
+        xgap=2,
         ygap=2,
     ))
 
