@@ -61,7 +61,7 @@ BASE_COLORS = {
     'Администрация': '#95A5A6',
     'Стационар': '#118AB2',
     'Прочее': '#BDC3C7',
-    'Пусто': '#ECECEC',
+    'Пусто': '#95A5A6',
 }
 
 EXTRA_PALETTE = [
@@ -102,14 +102,10 @@ def assign_colors(all_specs):
 
 # ==================== ПАРСИНГ ====================
 def parse_excel_new(uploaded_file):
-    # Новый отчёт: заголовки на 7-й строке (индекс 6)
     df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
-    # Приводим имена колонок
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
-    # Убираем строки без даты или периода
     df = df.dropna(subset=['Дата', 'Период']).copy()
 
-    # Нормализуем кабинет: если пустой — берём название из Доктора
     def fix_cabinet(row):
         cab = row['Кабинет']
         if pd.isna(cab) or str(cab).strip() == '':
@@ -121,14 +117,11 @@ def parse_excel_new(uploaded_file):
 
     df['Кабинет'] = df.apply(fix_cabinet, axis=1)
 
-    # Дата
     df['date_parsed'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y', errors='coerce')
     df = df.dropna(subset=['date_parsed'])
     df['date_str'] = df['date_parsed'].dt.strftime('%d.%m.%Y')
     df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
-    df['weekday'] = df['date_parsed'].dt.strftime('%a')
 
-    # Период → start_time, end_time
     def parse_period(p):
         m = re.match(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})', str(p))
         if m:
@@ -139,14 +132,9 @@ def parse_excel_new(uploaded_file):
     df[['start_time', 'end_time']] = df['Период'].apply(
         lambda x: pd.Series(parse_period(x))
     )
-
-    # Специализация
     df['spec'] = df['Специализация'].apply(normalize_spec)
-
-    # Фамилия
     df['surname'] = df['Доктор'].apply(get_surname)
 
-    # Часы
     def calc_hours(row):
         if pd.notna(row['start_time']) and pd.notna(row['end_time']):
             s = row['start_time'].hour * 60 + row['start_time'].minute
@@ -166,17 +154,35 @@ def cabinet_sort_key(c):
         return (1, c)
 
 
-def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_to_code):
-    df_f = df[df['Кабинет'].isin(selected_cabinets) & df['date_short'].isin(selected_dates)].copy()
+def add_legend(fig, colors, spec_to_code):
+    """Добавляет кастомную легенду через dummy traces."""
+    for spec in sorted(spec_to_code.keys()):
+        if spec == 'Пусто':
+            continue
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=14, color=colors.get(spec, '#999'),
+                        line=dict(width=1, color='white')),
+            name=spec,
+            showlegend=True,
+            hoverinfo='skip',
+        ))
 
-    all_dates = sorted(selected_dates, key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))
+
+def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_to_code):
+    df_f = df[df['Кабинет'].isin(selected_cabinets) &
+              df['date_short'].isin(selected_dates)].copy()
+
+    all_dates = sorted(selected_dates,
+                       key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))
     all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
 
-    # Агрегируем по кабинет-дата
+    # Агрегируем
     if not df_f.empty:
         agg = df_f.groupby(['date_short', 'Кабинет']).agg({
             'spec': lambda x: x.mode().iloc[0] if not x.mode().empty else 'Прочее',
-            'surname': lambda x: ', '.join(dict.fromkeys(x)),  # уникальные, сохраняя порядок
+            'surname': lambda x: ', '.join(dict.fromkeys(x)),
             'hours': 'sum',
         }).reset_index()
     else:
@@ -189,12 +195,11 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
     grid['spec'] = grid['spec'].fillna('Пусто')
     grid['surname'] = grid['surname'].fillna('Пусто')
 
-    # Обрезаем длинные строки фамилий
     def truncate(txt):
         if pd.isna(txt):
             return 'Пусто'
         t = str(txt)
-        return t if len(t) <= 16 else t[:13] + '…'
+        return t if len(t) <= 14 else t[:11] + '…'
 
     grid['cell_text'] = grid['surname'].apply(truncate)
     grid['code'] = grid['spec'].map(lambda s: spec_to_code.get(s, spec_to_code['Пусто']))
@@ -206,7 +211,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
     pivot_spec = grid.pivot(index='Кабинет', columns='date_short', values='spec')
     pivot_spec = pivot_spec.reindex(index=all_cabs, columns=all_dates).fillna('Пусто')
 
-    # Цветовая шкала (дискретная)
+    # Цветовая шкала
     n = len(spec_to_code)
     colorscale = []
     for spec, code in sorted(spec_to_code.items(), key=lambda x: x[1]):
@@ -231,27 +236,53 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         showscale=False,
         zmin=0,
         zmax=n - 1,
+        xgap=2,
+        ygap=2,
     ))
+
+    add_legend(fig, colors, spec_to_code)
 
     fig.update_layout(
         title='📅 Обзорная тепловая карта (цвет = специализация, текст = врач)',
         xaxis_title='Дата',
         yaxis_title='Кабинет',
-        height=max(450, len(all_cabs) * 45),
-        width=max(800, len(all_dates) * 130),
-        yaxis={'categoryorder': 'array', 'categoryarray': all_cabs[::-1]},
+        height=max(500, len(all_cabs) * 48),
+        width=max(900, len(all_dates) * 140),
+        yaxis={
+            'categoryorder': 'array',
+            'categoryarray': all_cabs[::-1],
+            'dtick': 1,
+            'showgrid': True,
+            'gridcolor': '#E0E0E0',
+            'gridwidth': 1,
+        },
+        xaxis={
+            'dtick': 1,
+            'showgrid': True,
+            'gridcolor': '#E0E0E0',
+            'gridwidth': 1,
+        },
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
-        margin=dict(l=80, r=40, t=60, b=60),
+        margin=dict(l=80, r=40, t=80, b=60),
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=-0.25,
+            xanchor='center',
+            x=0.5,
+            font=dict(size=10),
+            itemsizing='constant',
+        ),
     )
     return fig
 
 
 def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_code):
-    df_day = df[(df['date_str'] == selected_date) & df['Кабинет'].isin(selected_cabinets)].copy()
+    df_day = df[(df['date_str'] == selected_date) &
+                df['Кабинет'].isin(selected_cabinets)].copy()
 
-    # Все часы с 7:00 до 23:30, шаг 30 мин
     hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
     all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
 
@@ -290,11 +321,10 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                     docs.append(r['surname'])
                     specs.append(r['spec'])
             if docs:
-                # Уникальные фамилии
                 unique_docs = list(dict.fromkeys(docs))
                 txt = ', '.join(unique_docs)
-                if len(txt) > 14:
-                    txt = txt[:11] + '…'
+                if len(txt) > 12:
+                    txt = txt[:9] + '…'
                 z_row.append(spec_to_code.get(specs[0], spec_to_code['Пусто']))
                 text_row.append(txt)
                 spec_row.append(specs[0])
@@ -324,19 +354,46 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         showscale=False,
         zmin=0,
         zmax=n - 1,
+        xgap=1,
+        ygap=2,
     ))
+
+    add_legend(fig, colors, spec_to_code)
 
     fig.update_layout(
         title=f'⏰ Почасовая карта — {selected_date}',
         xaxis_title='Время',
         yaxis_title='Кабинет',
-        height=max(500, len(all_cabs) * 45),
-        width=1400,
-        yaxis={'categoryorder': 'array', 'categoryarray': all_cabs[::-1]},
+        height=max(520, len(all_cabs) * 48),
+        width=1450,
+        yaxis={
+            'categoryorder': 'array',
+            'categoryarray': all_cabs[::-1],
+            'dtick': 1,
+            'showgrid': True,
+            'gridcolor': '#E0E0E0',
+            'gridwidth': 1,
+        },
+        xaxis={
+            'dtick': 1,
+            'showgrid': True,
+            'gridcolor': '#E0E0E0',
+            'gridwidth': 1,
+            'tickangle': 45,
+        },
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
-        margin=dict(l=80, r=40, t=60, b=60),
+        margin=dict(l=80, r=40, t=80, b=100),
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=-0.3,
+            xanchor='center',
+            x=0.5,
+            font=dict(size=10),
+            itemsizing='constant',
+        ),
     )
     return fig
 
@@ -353,7 +410,9 @@ def main():
         unsafe_allow_html=True,
     )
 
-    uploaded_file = st.file_uploader("📁 Загрузите отчёт Excel (cabinets.xlsx)", type=['xlsx', 'xls'])
+    uploaded_file = st.file_uploader(
+        "📁 Загрузите отчёт Excel (cabinets.xlsx)", type=['xlsx', 'xls']
+    )
 
     if uploaded_file is None:
         st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
@@ -375,7 +434,11 @@ def main():
     if 'Пусто' not in all_specs:
         all_specs = ['Пусто'] + all_specs
     colors = assign_colors(all_specs)
-    spec_to_code = {s: i for i, s in enumerate(sorted(all_specs, key=lambda x: list(colors.keys()).index(x) if x in colors else 999))}
+    spec_to_code = {
+        s: i for i, s in enumerate(
+            sorted(all_specs, key=lambda x: list(colors.keys()).index(x) if x in colors else 999)
+        )
+    }
 
     # Метрики
     c1, c2, c3, c4 = st.columns(4)
@@ -394,68 +457,103 @@ def main():
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
-        mode = st.radio("Режим:", ["📅 Обзор по дням", "⏰ Детально по часам"], index=0)
+        mode = st.radio(
+            "Режим:",
+            ["📅 Обзор по дням", "⏰ Детально по часам"],
+            index=0,
+        )
 
         all_cabinets = sorted(df['Кабинет'].unique(), key=cabinet_sort_key)
-        selected_cabinets = st.multiselect("Кабинеты:", all_cabinets, default=all_cabinets)
+        selected_cabinets = st.multiselect(
+            "Кабинеты:", all_cabinets, default=all_cabinets
+        )
 
         if not selected_cabinets:
             st.warning("Выберите хотя бы один кабинет")
             return
 
-        all_dates_full = sorted(df['date_str'].unique(),
-                                key=lambda x: datetime.strptime(x, '%d.%m.%Y'))
-        all_dates_short = sorted(df['date_short'].unique(),
-                                 key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))
+        all_dates_full = sorted(
+            df['date_str'].unique(),
+            key=lambda x: datetime.strptime(x, '%d.%m.%Y')
+        )
+        all_dates_short = sorted(
+            df['date_short'].unique(),
+            key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y')
+        )
 
         if mode == "📅 Обзор по дням":
-            date_opt = st.radio("Диапазон:", ["Последние 7 дней", "Все дни", "Выбрать вручную"], index=0)
+            date_opt = st.radio(
+                "Диапазон:",
+                ["Последние 7 дней", "Все дни", "Выбрать вручную"],
+                index=0,
+            )
             if date_opt == "Все дни":
                 selected_dates = all_dates_short
             elif date_opt == "Последние 7 дней":
-                selected_dates = all_dates_short[-7:] if len(all_dates_short) >= 7 else all_dates_short
+                selected_dates = (all_dates_short[-7:]
+                                  if len(all_dates_short) >= 7
+                                  else all_dates_short)
             else:
-                selected_dates = st.multiselect("Даты:", all_dates_short, default=all_dates_short[:7])
+                selected_dates = st.multiselect(
+                    "Даты:", all_dates_short, default=all_dates_short[:7]
+                )
             selected_date = None
         else:
             selected_date = st.selectbox("Дата:", all_dates_full)
             selected_dates = []
 
         st.divider()
-        st.markdown("**🩺 Легенда:**")
+        st.markdown("**🩺 Специализации:**")
         for spec in sorted(spec_to_code.keys()):
             if spec == 'Пусто':
                 continue
             color = colors.get(spec, '#999')
             st.markdown(
                 f"<span style='display:inline-block; width:12px; height:12px; "
-                f"background:{color}; border-radius:2px; margin-right:6px;'></span>{spec}",
+                f"background:{color}; border-radius:2px; margin-right:6px;'>"
+                f"</span>{spec}",
                 unsafe_allow_html=True,
             )
         st.markdown(
             f"<span style='display:inline-block; width:12px; height:12px; "
-            f"background:{colors['Пусто']}; border-radius:2px; margin-right:6px;'></span>Пусто",
+            f"background:{colors['Пусто']}; border-radius:2px; margin-right:6px;'>"
+            f"</span>Пусто",
             unsafe_allow_html=True,
         )
 
     # ===== ОСНОВНАЯ ОБЛАСТЬ =====
     if mode == "📅 Обзор по дням":
         if len(selected_dates) > 7:
-            st.warning("⚠️ Для обзора отображается максимум 7 дней. Показаны последние 7 выбранных.")
-            selected_dates = sorted(selected_dates, key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))[-7:]
+            st.warning(
+                "⚠️ Для обзора отображается максимум 7 дней. "
+                "Показаны последние 7 выбранных."
+            )
+            selected_dates = sorted(
+                selected_dates,
+                key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y')
+            )[-7:]
 
-        st.subheader(f"📅 Обзор с {selected_dates[0]} по {selected_dates[-1]} ({len(selected_dates)} дн.)")
-        fig = create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_to_code)
+        st.subheader(
+            f"📅 Обзор с {selected_dates[0]} по {selected_dates[-1]} "
+            f"({len(selected_dates)} дн.)"
+        )
+        fig = create_overview_heatmap(
+            df, selected_cabinets, selected_dates, colors, spec_to_code
+        )
         st.plotly_chart(fig, use_container_width=False)
 
         with st.expander("📊 Таблица данных"):
-            show = df[df['Кабинет'].isin(selected_cabinets) & df['date_short'].isin(selected_dates)][
-                ['date_str', 'Кабинет', 'Доктор', 'spec', 'Период', 'hours']
-            ].sort_values(['date_str', 'Кабинет', 'start_time'])
+            show = df[
+                df['Кабинет'].isin(selected_cabinets) &
+                df['date_short'].isin(selected_dates)
+            ][['date_str', 'Кабинет', 'Доктор', 'spec', 'Период', 'hours']]
+            show = show.sort_values(['date_str', 'Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
-        fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_code)
+        fig = create_hourly_heatmap(
+            df, selected_date, selected_cabinets, colors, spec_to_code
+        )
         st.plotly_chart(fig, use_container_width=False)
 
         df_day = df[df['date_str'] == selected_date]
@@ -470,7 +568,7 @@ def main():
         with st.expander("📊 Таблица данных за день"):
             show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
                 ['Кабинет', 'Доктор', 'spec', 'Период', 'hours']
-            ].sort_values(['Кабинет', 'start_time'])
+            ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
 
