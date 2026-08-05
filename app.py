@@ -217,9 +217,9 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
     def get_cell_info(row):
         if pd.isna(row['spec']):
             if row['date_short'] in dates_with_data:
-                return 'Пусто', 'Пусто', 0
+                return 'Пусто', 'Пусто', 0.0
             else:
-                return 'Нет данных', 'Нет данных', 0
+                return 'Нет данных', 'Нет данных', 0.0
         return row['spec'], row['surname'], row['hours']
 
     grid[['spec', 'surname', 'hours']] = grid.apply(
@@ -230,35 +230,25 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
 
     pivot_code = grid.pivot(index='Кабинет', columns='date_short', values='code')
     pivot_code = pivot_code.reindex(index=all_cabs, columns=all_dates)
+    pivot_code = pivot_code.fillna(spec_to_code['Нет данных'])
 
     pivot_spec = grid.pivot(index='Кабинет', columns='date_short', values='spec')
     pivot_spec = pivot_spec.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
     pivot_docs = grid.pivot(index='Кабинет', columns='date_short', values='surname')
     pivot_docs = pivot_docs.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
     pivot_hours = grid.pivot(index='Кабинет', columns='date_short', values='hours')
-    pivot_hours = pivot_hours.reindex(index=all_cabs, columns=all_dates).fillna(0)
+    pivot_hours = pivot_hours.reindex(index=all_cabs, columns=all_dates).fillna(0.0)
 
-    # Формируем hovertext (2D массив HTML-строк)
-    hover_text = []
+    # customdata: массив (n_cabs, n_dates, 3) — [специализация, врач, часы]
+    customdata = []
     for i, cab in enumerate(all_cabs):
-        row_hover = []
+        row_cd = []
         for j, d in enumerate(all_dates):
             spec = pivot_spec.iloc[i, j]
             docs = pivot_docs.iloc[i, j]
             hrs = pivot_hours.iloc[i, j]
-            if spec == 'Нет данных':
-                row_hover.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {d}<br><b>Нет данных</b>")
-            elif spec == 'Пусто':
-                row_hover.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {d}<br><b>Пусто</b>")
-            else:
-                row_hover.append(
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Дата:</b> {d}<br>"
-                    f"<b>Специализация:</b> {spec}<br>"
-                    f"<b>Врач(и):</b> {docs}<br>"
-                    f"<b>Часов:</b> {hrs:.1f}"
-                )
-        hover_text.append(row_hover)
+            row_cd.append([str(spec), str(docs), float(hrs)])
+        customdata.append(row_cd)
 
     n = len(spec_to_code)
     colorscale = []
@@ -270,14 +260,21 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         z=pivot_code.values,
         x=all_dates,
         y=all_cabs,
-        hovertext=hover_text,
-        hoverinfo='text',
+        customdata=customdata,
+        hovertemplate=(
+            "<b>Кабинет:</b> %{y}<br>"
+            "<b>Дата:</b> %{x}<br>"
+            "<b>Специализация:</b> %{customdata[0]}<br>"
+            "<b>Врач(и):</b> %{customdata[1]}<br>"
+            "<b>Часов:</b> %{customdata[2]:.1f}<extra></extra>"
+        ),
         colorscale=colorscale,
         showscale=False,
         zmin=0,
         zmax=n - 1,
         xgap=2,
         ygap=2,
+        hoverlabel=dict(bgcolor='white', font_size=12, font_family='Arial'),
     ))
 
     add_legend(fig, colors, spec_to_code)
@@ -291,7 +288,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         yaxis=dict(
             categoryorder='array',
             categoryarray=all_cabs,
-            autorange='reversed',      # ← 1 сверху, 25 снизу
+            autorange='reversed',
             dtick=1,
             showgrid=True,
             gridcolor='#E0E0E0',
@@ -302,7 +299,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             showgrid=True,
             gridcolor='#E0E0E0',
             gridwidth=1,
-            type='category',           # ← даты отображаются как есть (ДД.ММ)
+            type='category',
         ),
         plot_bgcolor='white',
         paper_bgcolor='white',
@@ -349,11 +346,11 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         colorscale.append([pos, colors[spec]])
 
     z_matrix = []
-    hover_matrix = []
+    customdata = []
 
     for cab in all_cabs:
         cab_df = df_day[df_day['Кабинет'] == cab]
-        z_row, hover_row = [], []
+        z_row, cd_row = [], []
         for h in hours:
             docs = []
             specs = []
@@ -366,30 +363,31 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                 txt = ', '.join(unique_docs)
                 spec_val = specs[0]
                 z_row.append(spec_to_code.get(spec_val, spec_to_code['Пусто']))
-                hover_row.append(
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Время:</b> {h}<br>"
-                    f"<b>Специализация:</b> {spec_val}<br>"
-                    f"<b>Врач:</b> {txt}"
-                )
+                cd_row.append([str(spec_val), str(txt)])
             else:
                 z_row.append(spec_to_code['Пусто'])
-                hover_row.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br><b>Пусто</b>")
+                cd_row.append(['Пусто', 'Пусто'])
         z_matrix.append(z_row)
-        hover_matrix.append(hover_row)
+        customdata.append(cd_row)
 
     fig = go.Figure(data=go.Heatmap(
         z=z_matrix,
         x=hours,
         y=all_cabs,
-        hovertext=hover_matrix,
-        hoverinfo='text',
+        customdata=customdata,
+        hovertemplate=(
+            "<b>Кабинет:</b> %{y}<br>"
+            "<b>Время:</b> %{x}<br>"
+            "<b>Специализация:</b> %{customdata[0]}<br>"
+            "<b>Врач:</b> %{customdata[1]}<extra></extra>"
+        ),
         colorscale=colorscale,
         showscale=False,
         zmin=0,
         zmax=n - 1,
         xgap=1,
         ygap=2,
+        hoverlabel=dict(bgcolor='white', font_size=12, font_family='Arial'),
     ))
 
     add_legend(fig, colors, spec_to_code)
@@ -403,7 +401,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         yaxis=dict(
             categoryorder='array',
             categoryarray=all_cabs,
-            autorange='reversed',      # ← 1 сверху, 25 снизу
+            autorange='reversed',
             dtick=1,
             showgrid=True,
             gridcolor='#E0E0E0',
