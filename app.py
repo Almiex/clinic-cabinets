@@ -247,7 +247,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0.5, color='#555555'),
+            line=dict(width=0.5, color='#FFFFFF'),
         ),
         hovertext=h_list,
         hoverinfo='text',
