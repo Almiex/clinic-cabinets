@@ -136,10 +136,7 @@ def parse_excel_new(uploaded_file):
     df.columns = df.columns.str.strip().str.split('~').str[0].str.strip()
     
     # Теперь колонки гарантированно называются: 'Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация'
-    
-    # Дальше ваш код без изменений:
-    def fix_cabinet(row):
-        cab = row['Кабинет']
+
 
     def fix_cabinet(row):
         cab = row['Кабинет']
