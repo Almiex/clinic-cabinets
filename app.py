@@ -119,23 +119,14 @@ def assign_colors(all_specs):
 
 
 # ==================== ПАРСИНГ ====================
-# def parse_excel_new(uploaded_file):
-#     try:
-#         df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=6)
-#     except Exception:
-#         df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
+ def parse_excel_new(uploaded_file):
+     try:
+         df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=6)
+   except Exception:
+        df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
     
-#     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
-#     df = df.dropna(subset=['Дата', 'Период']).copy()
-
-def parse_excel_new(uploaded_file):
-    # Читаем файл, заголовки на 4-й строке (индекс 3)
-    df = pd.read_excel(uploaded_file, header=3)
-    
-    # Сверхнадежная очистка: убираем пробелы и всё, что идет после символа "~"
-    df.columns = df.columns.str.strip().str.split('~').str[0].str.strip()
-    
-    # Теперь колонки гарантированно называются: 'Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация'
+     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
+     df = df.dropna(subset=['Дата', 'Период']).copy()
 
 
     def fix_cabinet(row):
