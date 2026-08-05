@@ -5,6 +5,12 @@ from datetime import datetime, time, timedelta
 import re
 import numpy as np
 
+import streamlit as st
+import plotly
+
+st.write(st.__version__)
+st.write(plotly.__version__)
+
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
 # ==================== НОРМАЛИЗАЦИЯ СПЕЦИАЛИЗАЦИЙ ====================
