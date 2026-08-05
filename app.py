@@ -5,9 +5,6 @@ from datetime import datetime, time, timedelta
 import re
 import numpy as np
 
-import streamlit as st
-import plotly
-
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
 # ==================== НОРМАЛИЗАЦИЯ СПЕЦИАЛИЗАЦИЙ ====================
@@ -243,25 +240,27 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
     pivot_hours = grid.pivot(index='Кабинет', columns='date_short', values='hours')
     pivot_hours = pivot_hours.reindex(index=all_cabs, columns=all_dates).fillna(0.0)
 
-    # 2D-массив hover-текстов (строки × столбцы)
-    hover_text = np.empty((len(all_cabs), len(all_dates)), dtype=object)
+    # === 100% рабочий hover: text + hovertemplate ===
+    hover_text = []
     for i, cab in enumerate(all_cabs):
+        row = []
         for j, d in enumerate(all_dates):
             spec = pivot_spec.iloc[i, j]
             docs = pivot_docs.iloc[i, j]
             hrs = pivot_hours.iloc[i, j]
             if spec == 'Нет данных':
-                hover_text[i, j] = f"Кабинет: {cab}\nДата: {d}\nНет данных"
+                row.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {d}<br>Нет данных")
             elif spec == 'Пусто':
-                hover_text[i, j] = f"Кабинет: {cab}\nДата: {d}\nПусто"
+                row.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {d}<br>Пусто")
             else:
-                hover_text[i, j] = (
-                    f"Кабинет: {cab}\n"
-                    f"Дата: {d}\n"
-                    f"Специализация: {spec}\n"
-                    f"Врач(и): {docs}\n"
-                    f"Часов: {hrs:.1f}"
+                row.append(
+                    f"<b>Кабинет:</b> {cab}<br>"
+                    f"<b>Дата:</b> {d}<br>"
+                    f"<b>Специализация:</b> {spec}<br>"
+                    f"<b>Врач(и):</b> {docs}<br>"
+                    f"<b>Часов:</b> {hrs:.1f}"
                 )
+        hover_text.append(row)
 
     n = len(spec_to_code)
     colorscale = []
@@ -273,14 +272,14 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         z=pivot_code.values,
         x=all_dates,
         y=all_cabs,
-        hovertext=hover_text,
-        hoverinfo='text',
+        text=hover_text,               # ← 2D list of strings
+        hovertemplate='%{text}<extra></extra>',
         colorscale=colorscale,
         showscale=False,
         zmin=0,
         zmax=n - 1,
-        xgap=0,
-        ygap=0,
+        xgap=2,
+        ygap=2,
     ))
 
     add_legend(fig, colors, spec_to_code)
@@ -311,7 +310,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=80, b=60),
-        hovermode='closest',
         legend=dict(
             orientation='h',
             yanchor='bottom',
@@ -371,14 +369,14 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                 spec_val = specs[0]
                 z_row.append(spec_to_code.get(spec_val, spec_to_code['Пусто']))
                 hover_row.append(
-                    f"Кабинет: {cab}\n"
-                    f"Время: {h}\n"
-                    f"Специализация: {spec_val}\n"
-                    f"Врач: {txt}"
+                    f"<b>Кабинет:</b> {cab}<br>"
+                    f"<b>Время:</b> {h}<br>"
+                    f"<b>Специализация:</b> {spec_val}<br>"
+                    f"<b>Врач:</b> {txt}"
                 )
             else:
                 z_row.append(spec_to_code['Пусто'])
-                hover_row.append(f"Кабинет: {cab}\nВремя: {h}\nПусто")
+                hover_row.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто")
         z_matrix.append(z_row)
         hover_text.append(hover_row)
 
@@ -386,8 +384,8 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         z=z_matrix,
         x=hours,
         y=all_cabs,
-        hovertext=np.array(hover_text, dtype=object),
-        hoverinfo='text',
+        text=hover_text,               # ← 2D list of strings
+        hovertemplate='%{text}<extra></extra>',
         colorscale=colorscale,
         showscale=False,
         zmin=0,
@@ -424,7 +422,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=80, b=100),
-        hovermode='closest',
         legend=dict(
             orientation='h',
             yanchor='bottom',
@@ -611,14 +608,7 @@ def main():
         fig = create_overview_heatmap(
             df, selected_cabinets, selected_dates, colors, spec_to_code
         )
-        st.plotly_chart(
-    fig,
-    use_container_width=False,
-    config={
-        "displayModeBar": False,
-        "scrollZoom": False
-    }
-)
+        st.plotly_chart(fig, use_container_width=False)
 
         with st.expander("📊 Таблица данных"):
             show = df[
@@ -632,14 +622,7 @@ def main():
         fig = create_hourly_heatmap(
             df, selected_date, selected_cabinets, colors, spec_to_code
         )
-        st.plotly_chart(
-    fig,
-    use_container_width=False,
-    config={
-        "displayModeBar": False,
-        "scrollZoom": False
-    }
-)
+        st.plotly_chart(fig, use_container_width=False)
 
         df_day = df[df['date_str'] == selected_date]
         c1, c2, c3 = st.columns(3)
@@ -656,20 +639,6 @@ def main():
             ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
-st.divider()
-st.write("### Тест hover")
-
-test_fig = go.Figure(
-    go.Scatter(
-        x=[1, 2, 3],
-        y=[1, 2, 3],
-        mode="markers",
-        marker=dict(size=30),
-        hovertemplate="Работает! x=%{x}<extra></extra>"
-    )
-)
-
-st.plotly_chart(test_fig)
 
 if __name__ == "__main__":
     main()
