@@ -376,40 +376,43 @@ def cabinet_sort_key(c):
 #             used_normals = set()
 #             sub_idx = 1
 
-#             for s_entry in special:
-#                 # Ищем обычных врачей со совпадающей специализацией
-#                 matching = []
-#                 for n_entry in normal:
-#                     if n_entry.name not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
-#                         matching.append(n_entry)
-#                         used_normals.add(n_entry.name)
+            for s_entry in special:
+                matching = []
+                for n_entry in normal:
+                    if n_entry.name not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
+                        matching.append(n_entry)
+                        used_normals.add(n_entry.name)
 
-#                 docs = [s_entry['surname']] + [m['surname'] for m in matching]
-#                 docs_unique = list(dict.fromkeys(docs))
-#                 txt = ', '.join(docs_unique)
+                docs = [s_entry['surname']] + [m['surname'] for m in matching]
+                docs_unique = list(dict.fromkeys(docs))
+                txt = ', '.join(docs_unique)
 
-#                 # === КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ===
-#                 # В клетке показываем обычного врача, если он есть,
-#                 # иначе — special (как раньше)
-#                 if matching:
-#                     display_text = abbreviate(matching[0]['surname'])
-#                 else:
-#                     display_text = abbreviate(s_entry['surname'])
-#                 # ===========================
+                if matching:
+                    display_text = abbreviate(matching[0]['surname'])
+                    # Есть другой врач — цвет обычный
+                    cell_color = colors.get(s_entry['spec'], '#999')
+                else:
+                    display_text = abbreviate(s_entry['surname'])
+                    # Перевязочная одна — цвет тусклый
+                    base_color = colors.get(s_entry['spec'], '#999')
+                    if 'перевязочная' in s_entry['surname'].lower():
+                        cell_color = dull_color(base_color, 0.4)
+                    else:
+                        cell_color = base_color
 
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': f"{cab}.{sub_idx}",
-#                     'color': colors.get(s_entry['spec'], '#999'),
-#                     'text': display_text,
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {s_entry['spec']}<br>"
-#                         f"<b>Врач:</b> {txt}"
-#                     )
-#                 })
-#                 sub_idx += 1
+                display_cells.append({
+                    'x': h,
+                    'y': f"{cab}.{sub_idx}",
+                    'color': cell_color,
+                    'text': display_text,
+                    'hover': (
+                        f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
+                        f"<b>Время:</b> {h}<br>"
+                        f"<b>Специализация:</b> {s_entry['spec']}<br>"
+                        f"<b>Врач:</b> {txt}"
+                    )
+                })
+                sub_idx += 1
 
 #             unused = [e for e in normal if e.name not in used_normals]
 #             if unused:
