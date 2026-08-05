@@ -290,53 +290,77 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
 
 
 def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
+    import pandas as pd
+    import plotly.graph_objects as go
+    
+    # Защита от NameError (дефолтные значения, если забыли объявить вверху)
+    cell_size = globals().get('CELL_SIZE', 40)
+    marker_size = globals().get('MARKER_SIZE', 30)
+    border_width = globals().get('BORDER_WIDTH', 1)
+    border_color = globals().get('BORDER_COLOR', 'white')
+
     df_day = df[(df['date_str'] == selected_date) &
                 df['Кабинет'].isin(selected_cabinets)].copy()
 
     hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
-    all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
+    
+    # Безопасная сортировка на случай, если функция cabinet_sort_key отсутствует
+    if 'cabinet_sort_key' in globals():
+        all_cabs = sorted(selected_cabinets, key=cabinet_sort_key)
+    else:
+        all_cabs = sorted(selected_cabinets)
 
     def time_to_min(t):
-        if t is None:
+        if pd.isna(t) or t is None:
             return None
-        return t.hour * 60 + t.minute
+        # Если это строка (например "08:30"), переводим в минуты
+        if isinstance(t, str):
+            try:
+                h, m = map(int, t.split(':')[:2])
+                return h * 60 + m
+            except:
+                return None
+        # Если это объект времени/даты
+        if hasattr(t, 'hour') and hasattr(t, 'minute'):
+            return t.hour * 60 + t.minute
+        return None
 
     def is_working(row, time_str):
         if pd.isna(row['start_time']) or pd.isna(row['end_time']):
             return False
-        h, m = map(int, time_str.split(':'))
-        minutes = h * 60 + m
-        start = time_to_min(row['start_time'])
-        end = time_to_min(row['end_time'])
-        return start <= minutes < end
+        try:
+            h, m = map(int, time_str.split(':'))
+            minutes = h * 60 + m
+            start = time_to_min(row['start_time'])
+            end = time_to_min(row['end_time'])
+            if start is None or end is None:
+                return False
+            return start <= minutes < end
+        except:
+            return False
 
     VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ'
 
     def abbreviate(name):
-        if not name:
+        if not name or pd.isna(name):
             return ''
+        name = str(name).strip()
         s_lower = name.lower()
 
-        # Операционная → "о"
         if 'операционная' in s_lower:
             return 'о'
-
-        # Перевязочная → "пк"
         if 'перевязочная' in s_lower:
             return 'пк'
-
-        # Кабинет / стационар → аббревиатура из первых букв слов, строчные, без точки
         if 'кабинет' in s_lower or 'стационар' in s_lower:
             words = name.split()
             return ''.join(w[0].lower() for w in words if w)
 
-        # Обычная фамилия — с заглавной буквы, сохраняем регистр исходника
         if len(name) >= 4 and name[1] in VOWELS and name[2] in VOWELS:
-            return name[:4]               # 4 буквы, без точки (например: Иван)
+            return name[:4]
         elif len(name) >= 3 and name[2] in VOWELS:
-            return name[:2] + '.'         # 2 буквы + точка (например: Ал.)
+            return name[:2] + '.'
         elif len(name) >= 3:
-            return name[:3] + '.'         # 3 буквы + точка (например: Тит.)
+            return name[:3] + '.'
         elif len(name) == 2:
             return name[:2] + '.'
         elif len(name) == 1:
@@ -351,13 +375,16 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
             specs = []
             for _, r in cab_df.iterrows():
                 if is_working(r, h):
-                    docs.append(r['surname'])
-                    specs.append(r['spec'])
+                    # Проверка на наличие ключей, чтобы не упасть по KeyError
+                    doc_name = r.get('surname', 'Врач')
+                    spec_name = r.get('spec', 'Общая')
+                    docs.append(doc_name)
+                    specs.append(spec_name)
             x_list.append(h)
             y_list.append(cab)
             if docs:
                 unique_docs = list(dict.fromkeys(docs))
-                txt = ', '.join(unique_docs)
+                txt = ', '.join(map(str, unique_docs))
                 spec_val = specs[0]
                 c_list.append(colors.get(spec_val, '#999'))
                 t_list.append(abbreviate(unique_docs[0]))
@@ -374,8 +401,8 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
     n_rows = len(all_cabs)
     n_cols = len(hours)
-    height = n_rows * CELL_SIZE + 160
-    width = n_cols * CELL_SIZE + 120
+    height = n_rows * cell_size + 160
+    width = n_cols * cell_size + 120
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -383,16 +410,13 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         mode='markers+text',
         marker=dict(
             symbol='square',
-            size=MARKER_SIZE,
+            size=marker_size,
             color=c_list,
-            line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
+            line=dict(width=border_width, color=border_color),
         ),
         text=t_list,
         textposition='middle center',
-        textfont=dict(
-            size=13,
-            color='white',
-        ),
+        textfont=dict(size=13, color='white'),
         hovertext=h_list,
         hoverinfo='text',
         showlegend=False,
