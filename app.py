@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, time, timedelta
-import re
+from datetime import datetime, time
 
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
@@ -15,6 +14,170 @@ SPEC_MAP = {
     'хирургия': 'Хирургия',
     'хирург': 'Хирургия',
     'травматолог': 'Травматология',
+    'ортопед': 'Травматология',
+    'рентгенолог': 'Рентген',
+    'рентген': 'Рентген',
+    'ультразвуковой': 'УЗИ',
+    'уздг': 'УЗИ',
+    'функциональной диагностики': 'Функц. диагностика',
+    'гинеколог': 'Гинекология',
+    'акушер': 'Гинекология',
+    'уролог': 'Урология',
+    'дерматовенеролог': 'Дерматология',
+    'онколог': 'Онкология',
+    'флеболог': 'Флебология',
+    'гастроэнтеролог': 'Гастроэнтерология',
+    'отоларинголог': 'ЛОР',
+    'колопроктолог': 'Колопроктология',
+    'психолог': 'Психология',
+    'процедурные кабинеты': 'Процедурные',
+    '_процедурные кабинеты в квс': 'Процедурные',
+    'процедурные кабинеты в квс': 'Процедурные',
+    'лаборатория': 'Лаборатория',
+    'статистик': 'Администрация',
+    'дневной стационар': 'Стационар',
+}
+
+BASE_COLORS = {
+    'Терапия': '#2E86AB',
+    'Кардиология': '#A23B72',
+    'Эндокринология': '#F18F01',
+    'Неврология': '#C73E1D',
+    'Хирургия': '#E94F37',
+    'Травматология': '#F6AE2D',
+    'Рентген': '#6A4C93',
+    'УЗИ': '#9B5DE5',
+    'Функц. диагностика': '#00BBF9',
+    'Гинекология': '#F15BB5',
+    'Урология': '#3A86FF',
+    'Дерматология': '#8338EC',
+    'Онкология': '#FB5607',
+    'Флебология': '#FF006E',
+    'Гастроэнтерология': '#3A0CA3',
+    'ЛОР': '#4361EE',
+    'Колопроктология': '#7209B7',
+    'Психология': '#4CC9F0',
+    'Процедурные': '#86BBD8',
+    'Лаборатория': '#06D6A0',
+    'Администрация': '#95A5A6',
+    'Стационар': '#118AB2',
+    'Прочее': '#BDC3C7',
+    'Пусто': '#95A5A6',
+}
+
+EXTRA_PALETTE = [
+    '#264653', '#2a9d8f', '#e9c46a', '#f4a261', '#e76f51',
+    '#8ac926', '#1982c4', '#ffca3a', '#ff595e', '#8d99ae',
+    '#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#003049',
+]
+
+
+def normalize_spec(raw):
+    if pd.isna(raw):
+        return 'Прочее'
+    s = str(raw).strip().lower()
+    for key, val in SPEC_MAP.items():
+        if key in s:
+            return val
+    return 'Прочее'
+
+
+def get_display_name(full_name):
+    """Для процедурных кабинетов/мест — полное название, для врачей — фамилия."""
+    if pd.isna(full_name):
+        return ''
+    s = str(full_name).strip()
+    lower = s.lower()
+    if any(k in lower for k in ['кабинет', 'перевязочная', 'стационар', 'операционная', 'травмпункт']):
+        return s
+    parts = s.split()
+    return parts[0] if parts else s
+
+
+def assign_colors(all_specs):
+    colors = {}
+    extra_idx = 0
+    for spec in sorted(all_specs):
+        if spec in BASE_COLORS:
+            colors[spec] = BASE_COLORS[spec]
+        else:
+            colors[spec] = EXTRA_PALETTE[extra_idx % len(EXTRA_PALETTE)]
+            extra_idx += 1
+    return colors
+
+
+# ==================== ПАРСИНГ ====================
+def parse_excel_new(uploaded_file):
+    df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
+    df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
+    df = df.dropna(subset=['Дата', 'Период']).copy()
+
+    def fix_cabinet(cab):
+        if pd.isna(cab) or str(cab).strip() == '':
+            return None
+        try:
+            return str(int(float(cab)))
+        except (ValueError, TypeError):
+            return None
+
+    df['Кабинет'] = df['Кабинет'].apply(fix_cabinet)
+    df = df.dropna(subset=['Кабинет']).copy()
+
+    df['date_parsed'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y', errors='coerce')
+    df = df.dropna(subset=['date_parsed'])
+    df['date_str'] = df['date_parsed'].dt.strftime('%d.%m.%Y')
+    df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
+
+    def parse_period(p):
+        import re
+        m = re.match(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})', str(p))
+        if m:
+            h1, m1, h2, m2 = map(int, m.groups())
+            return time(h1, m1), time(h2, m2)
+        return None, None
+
+    df[['start_time', 'end_time']] = df['Период'].apply(
+        lambda x: pd.Series(parse_period(x))
+    )
+    df['spec'] = df['Специализация'].apply(normalize_spec)
+    df['display_name'] = df['Доктор'].apply(get_display_name)
+
+    def calc_hours(row):
+        if pd.notna(row['start_time']) and pd.notna(row['end_time']):
+            s = row['start_time'].hour * 60 + row['start_time'].minute
+            e = row['end_time'].hour * 60 + row['end_time'].minute
+            return max(0, (e - s) / 60)
+        return 0
+
+    df['hours'] = df.apply(calc_hours, axis=1)
+    return df
+
+
+# ==================== ВИЗУАЛИЗАЦИИ ====================
+def cabinet_sort_key(c):
+    try:
+        return (0, int(c))
+    except:
+        return (1, c)
+
+
+def add_legend(fig, colors, spec_to_code):
+    """Добавляет кастомную легенду через dummy traces."""
+    for spec in sorted(spec_to_code.keys()):
+        if spec == 'Пусто':
+            continue
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=14, color=colors.get(spec, '#999'),
+                        line=dict(width=1, color='white')),
+            name=spec,
+            showlegend=True,
+            hoverinfo='skip',
+        ))
+
+
+def create_overview
     'ортопед': 'Травматология',
     'рентгенолог': 'Рентген',
     'рентген': 'Рентген',
