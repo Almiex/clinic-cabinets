@@ -620,7 +620,7 @@ def main():
     )
 
     uploaded_file = st.file_uploader(
-        "📁 Загрузите отчёт Excel (cabinets.xlsx)", type=['xlsx', 'xls']
+        "📁 Загрузите отчёт Excel ( .xlsx)", type=['xlsx', 'xls']
     )
 
     if uploaded_file is None:
