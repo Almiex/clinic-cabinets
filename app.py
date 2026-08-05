@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime, time, timedelta
 import re
 
-st.set_page_config(page_title="График кабинетов", layout="wide")
+st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46          # сторона клетки в пикселях
@@ -177,10 +177,14 @@ def parse_excel_new(uploaded_file):
 
 # ==================== ВИЗУАЛИЗАЦИИ ====================
 def cabinet_sort_key(c):
+    s = str(c)
+    parts = s.split('.')
     try:
-        return (0, int(c))
-    except:
-        return (1, c)
+        main = int(parts[0])
+    except ValueError:
+        return (1, s, 0)
+    sub = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+    return (0, main, sub)
 
 
 def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
@@ -260,7 +264,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     ))
 
     fig.update_layout(
-        title='📅 Обзорный график',
+        title='📅 Обзорная тепловая карта',
         xaxis_title='Дата',
         yaxis_title='Кабинет',
         height=height,
@@ -289,262 +293,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     return fig
 
 
-def cabinet_sort_key(c):
-    s = str(c)
-    parts = s.split('.')
-    try:
-        main = int(parts[0])
-    except ValueError:
-        return (1, s, 0)
-    sub = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
-    return (0, main, sub)
-
-
-# def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
-#     df_day = df[(df['date_str'] == selected_date) &
-#                 df['Кабинет'].isin(selected_cabinets)].copy()
-
-#     hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
-
-#     def time_to_min(t):
-#         if t is None:
-#             return None
-#         return t.hour * 60 + t.minute
-
-#     def is_working(row, time_str):
-#         if pd.isna(row['start_time']) or pd.isna(row['end_time']):
-#             return False
-#         h, m = map(int, time_str.split(':'))
-#         minutes = h * 60 + m
-#         start = time_to_min(row['start_time'])
-#         end = time_to_min(row['end_time'])
-#         return start <= minutes < end
-
-#     VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ'
-#     SPECIAL_KEYWORDS = ['кабинет', 'стационар', 'хирургия', 'операционная', 'рентген', 'перевязочная']
-
-#     def is_special(name):
-#         if not name:
-#             return False
-#         return any(kw in name.lower() for kw in SPECIAL_KEYWORDS)
-
-#     def abbreviate(name):
-#         if not name:
-#             return ''
-#         s_lower = name.lower()
-#         if 'операционная' in s_lower:
-#             return 'о'
-#         if 'перевязочная' in s_lower:
-#             return 'пк.'
-#         if 'кабинет' in s_lower or 'стационар' in s_lower:
-#             words = name.split()
-#             return ''.join(w[0].lower() for w in words if w)
-#         if len(name) >= 4 and name[1] in VOWELS and name[2] in VOWELS:
-#             return name[:4]
-#         elif len(name) >= 3 and name[2] in VOWELS:
-#             return name[:2] + '.'
-#         elif len(name) >= 3:
-#             return name[:3] + '.'
-#         elif len(name) == 2:
-#             return name[:2] + '.'
-#         elif len(name) == 1:
-#             return name[0] + '.'
-#         return ''
-
-#     # === 1. Собираем записи по каждой клетке ===
-#     cell_data = {}
-#     for _, r in df_day.iterrows():
-#         for h in hours:
-#             if is_working(r, h):
-#                 key = (r['Кабинет'], h)
-#                 cell_data.setdefault(key, []).append(r)
-
-#     # === 2. Определяем, какие кабинеты нужно разделить на весь день ===
-#     needs_split = set()
-#     for (cab, h), entries in cell_data.items():
-#         if len(entries) > 1 and any(is_special(e['surname']) for e in entries):
-#             needs_split.add(cab)
-
-#     # === 3. Формируем клетки ===
-#     display_cells = []
-
-#     for (cab, h), entries in cell_data.items():
-#         if cab in needs_split:
-#             special = [e for e in entries if is_special(e['surname'])]
-#             normal = [e for e in entries if not is_special(e['surname'])]
-
-#             used_normals = set()
-#             sub_idx = 1
-
-            for s_entry in special:
-                matching = []
-                for n_entry in normal:
-                    if n_entry.name not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
-                        matching.append(n_entry)
-                        used_normals.add(n_entry.name)
-
-                docs = [s_entry['surname']] + [m['surname'] for m in matching]
-                docs_unique = list(dict.fromkeys(docs))
-                txt = ', '.join(docs_unique)
-
-                if matching:
-                    display_text = abbreviate(matching[0]['surname'])
-                    # Есть другой врач — цвет обычный
-                    cell_color = colors.get(s_entry['spec'], '#999')
-                else:
-                    display_text = abbreviate(s_entry['surname'])
-                    # Перевязочная одна — цвет тусклый
-                    base_color = colors.get(s_entry['spec'], '#999')
-                    if 'перевязочная' in s_entry['surname'].lower():
-                        cell_color = dull_color(base_color, 0.4)
-                    else:
-                        cell_color = base_color
-
-                display_cells.append({
-                    'x': h,
-                    'y': f"{cab}.{sub_idx}",
-                    'color': cell_color,
-                    'text': display_text,
-                    'hover': (
-                        f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-                        f"<b>Время:</b> {h}<br>"
-                        f"<b>Специализация:</b> {s_entry['spec']}<br>"
-                        f"<b>Врач:</b> {txt}"
-                    )
-                })
-                sub_idx += 1
-
-#             unused = [e for e in normal if e.name not in used_normals]
-#             if unused:
-#                 specs = [u['spec'] for u in unused]
-#                 docs = list(dict.fromkeys([u['surname'] for u in unused]))
-#                 txt = ', '.join(docs)
-
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': f"{cab}.{sub_idx}",
-#                     'color': colors.get(specs[0], '#999'),
-#                     'text': abbreviate(unused[0]['surname']),
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {specs[0]}<br>"
-#                         f"<b>Врач:</b> {txt}"
-#                     )
-#                 })
-
-#         else:
-#             if len(entries) == 1:
-#                 r = entries[0]
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': str(cab),
-#                     'color': colors.get(r['spec'], '#999'),
-#                     'text': abbreviate(r['surname']),
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {r['spec']}<br>"
-#                         f"<b>Врач:</b> {r['surname']}"
-#                     )
-#                 })
-#             else:
-#                 r = entries[0]
-#                 docs = list(dict.fromkeys([e['surname'] for e in entries]))
-#                 txt = ', '.join(docs)
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': str(cab),
-#                     'color': colors.get(r['spec'], '#999'),
-#                     'text': abbreviate(r['surname']),
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {r['spec']}<br>"
-#                         f"<b>Врач:</b> {txt}"
-#                     )
-#                 })
-
-#     # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
-#     base_cabs = set(str(c) for c in selected_cabinets)
-#     split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
-#     final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
-#     all_display_y = sorted(final_cabs, key=cabinet_sort_key)
-
-#     # === 5. Пустые клетки ===
-#     filled = set((c['x'], c['y']) for c in display_cells)
-#     for cab in all_display_y:
-#         for h in hours:
-#             if (h, cab) not in filled:
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': cab,
-#                     'color': colors.get('Пусто', '#999'),
-#                     'text': '',
-#                     'hover': f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто"
-#                 })
-
-#     display_cells.sort(key=lambda c: (cabinet_sort_key(c['y']), c['x']))
-
-#     x_list = [c['x'] for c in display_cells]
-#     y_list = [c['y'] for c in display_cells]
-#     c_list = [c['color'] for c in display_cells]
-#     t_list = [c['text'] for c in display_cells]
-#     h_list = [c['hover'] for c in display_cells]
-
-#     n_rows = len(all_display_y)
-#     n_cols = len(hours)
-#     height = n_rows * CELL_SIZE + 160
-#     width = n_cols * CELL_SIZE + 120
-
-#     fig = go.Figure(data=go.Scatter(
-#         x=x_list,
-#         y=y_list,
-#         mode='markers+text',
-#         marker=dict(
-#             symbol='square',
-#             size=MARKER_SIZE,
-#             color=c_list,
-#             line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
-#         ),
-#         text=t_list,
-#         textposition='middle center',
-#         textfont=dict(size=13, color='white'),
-#         hovertext=h_list,
-#         hoverinfo='text',
-#         showlegend=False,
-#     ))
-
-#     fig.update_layout(
-#         title=f'⏰ Почасовая карта — {selected_date}',
-#         xaxis_title='Время',
-#         yaxis_title='Кабинет',
-#         height=height,
-#         width=width,
-#         yaxis=dict(
-#             type='category',
-#             categoryorder='array',
-#             categoryarray=all_display_y,
-#             autorange='reversed',
-#             dtick=1,
-#             showgrid=False,
-#         ),
-#         xaxis=dict(
-#             categoryorder='array',
-#             categoryarray=hours,
-#             dtick=1,
-#             showgrid=False,
-#             tickangle=45,
-#         ),
-#         plot_bgcolor='white',
-#         paper_bgcolor='white',
-#         font=dict(size=12),
-#         margin=dict(l=80, r=40, t=60, b=100),
-#         showlegend=False,
-#     )
-#     return fig
-
-
 def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     df_day = df[(df['date_str'] == selected_date) &
                 df['Кабинет'].isin(selected_cabinets)].copy()
@@ -566,7 +314,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         return start <= minutes < end
 
     def dull_color(hex_color, factor=0.4):
-        """Смешивает цвет с белым, делая его тусклее."""
         hex_color = hex_color.lstrip('#')
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
@@ -645,16 +392,14 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
                 if matching:
                     display_text = abbreviate(matching[0]['surname'])
+                    cell_color = colors.get(s_entry['spec'], '#999')
                 else:
                     display_text = abbreviate(s_entry['surname'])
-
-                # === ТУСКЛЫЙ ЦВЕТ для перевязочной ===
-                base_color = colors.get(s_entry['spec'], '#999')
-                if 'перевязочная' in s_entry['surname'].lower():
-                    cell_color = dull_color(base_color, 0.4)
-                else:
-                    cell_color = base_color
-                # =======================================
+                    base_color = colors.get(s_entry['spec'], '#999')
+                    if 'перевязочная' in s_entry['surname'].lower():
+                        cell_color = dull_color(base_color, 0.4)
+                    else:
+                        cell_color = base_color
 
                 display_cells.append({
                     'x': h,
@@ -721,7 +466,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                     )
                 })
 
-    # === 4. Формируем ось Y ===
+    # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
     base_cabs = set(str(c) for c in selected_cabinets)
     split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
     final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
@@ -799,6 +544,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         showlegend=False,
     )
     return fig
+
 
 # ==================== СПЕЦИАЛЬНЫЕ КАБИНЕТЫ ====================
 SPECIAL_CABS = [
@@ -1021,7 +767,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
-    st.markdown("# 🏥 График загрузки кабинетов")
+    st.markdown("# 🏥 Тепловая карта загрузки кабинетов")
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
@@ -1038,10 +784,6 @@ def main():
 
     if uploaded_file is None:
         st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
-        # st.markdown("""
-        # **Ожидаемый формат (начиная с 7-й строки, Лист2):**
-        # | Кабинет | Дата | Период | Доктор | Специализация |
-        # """)
         return
 
     with st.spinner('⏳ Читаем и обрабатываем данные…'):
@@ -1081,8 +823,6 @@ def main():
         )
 
         if mode == "📅 Обзор по дням":
-            #st.caption("💡 Для корректного отображения выбирайте диапазон до 40 дней")
-            
             if len(all_dates_full) > 0:
                 min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y')
                 max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y')
