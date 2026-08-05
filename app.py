@@ -377,6 +377,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
             sub_idx = 1
 
             for s_entry in special:
+                # Ищем обычных врачей со совпадающей специализацией
                 matching = []
                 for n_entry in normal:
                     if n_entry.name not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
@@ -387,11 +388,20 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 docs_unique = list(dict.fromkeys(docs))
                 txt = ', '.join(docs_unique)
 
+                # === КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ===
+                # В клетке показываем обычного врача, если он есть,
+                # иначе — special (как раньше)
+                if matching:
+                    display_text = abbreviate(matching[0]['surname'])
+                else:
+                    display_text = abbreviate(s_entry['surname'])
+                # ===========================
+
                 display_cells.append({
                     'x': h,
                     'y': f"{cab}.{sub_idx}",
                     'color': colors.get(s_entry['spec'], '#999'),
-                    'text': abbreviate(s_entry['surname']),
+                    'text': display_text,
                     'hover': (
                         f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
                         f"<b>Время:</b> {h}<br>"
