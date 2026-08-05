@@ -443,7 +443,7 @@ def main():
         with st.expander("📊 Таблица данных"):
             show = df[df['cabinet'].isin(selected_cabinets) &
                       df['date_short'].isin(selected_dates)][
-                ['date', 'doctor', 'spec', 'cabinet', 'period', 'hours_tab']
+                ['date', 'doctor', 'spec', 'cabinet', 'period', 'start_time', 'hours_tab']
             ].sort_values(['date', 'cabinet', 'start_time'])
             st.dataframe(show, use_container_width=True, hide_index=True)
     else:
