@@ -276,8 +276,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         showscale=False,
         zmin=0,
         zmax=n - 1,
-        xgap=2,
-        ygap=2,
+        xgap=0,
+        ygap=0,
     ))
 
     add_legend(fig, colors, spec_to_code)
@@ -608,7 +608,14 @@ def main():
         fig = create_overview_heatmap(
             df, selected_cabinets, selected_dates, colors, spec_to_code
         )
-        st.plotly_chart(fig, use_container_width=False)
+        st.plotly_chart(
+    fig,
+    use_container_width=False,
+    config={
+        "displayModeBar": False,
+        "scrollZoom": False
+    }
+)
 
         with st.expander("📊 Таблица данных"):
             show = df[
@@ -622,7 +629,14 @@ def main():
         fig = create_hourly_heatmap(
             df, selected_date, selected_cabinets, colors, spec_to_code
         )
-        st.plotly_chart(fig, use_container_width=False)
+        st.plotly_chart(
+    fig,
+    use_container_width=False,
+    config={
+        "displayModeBar": False,
+        "scrollZoom": False
+    }
+)
 
         df_day = df[df['date_str'] == selected_date]
         c1, c2, c3 = st.columns(3)
