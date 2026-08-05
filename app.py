@@ -177,21 +177,6 @@ def cabinet_sort_key(c):
         return (1, c)
 
 
-def add_legend(fig, colors, spec_to_code):
-    for spec in sorted(spec_to_code.keys()):
-        if spec in ('Пусто', 'Нет данных'):
-            continue
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=14, color=colors.get(spec, '#999'),
-                        line=dict(width=1, color='white')),
-            name=spec,
-            showlegend=True,
-            hoverinfo='skip',
-        ))
-
-
 def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_to_code):
     df_f = df[df['Кабинет'].isin(selected_cabinets)].copy()
 
@@ -266,9 +251,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         ),
         hovertext=h_list,
         hoverinfo='text',
+        showlegend=False,          # ← скрыть trace 0
     ))
-
-    add_legend(fig, colors, spec_to_code)
 
     fig.update_layout(
         title='📅 Обзорная тепловая карта (цвет = специализация)',
@@ -277,7 +261,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         height=height,
         width=width,
         yaxis=dict(
-            type='category',               # ← только наши категории
+            type='category',
             categoryorder='array',
             categoryarray=all_cabs,
             autorange='reversed',
@@ -299,15 +283,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=80, b=60),
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=-0.25,
-            xanchor='center',
-            x=0.5,
-            font=dict(size=10),
-            itemsizing='constant',
-        ),
+        showlegend=False,          # ← убрать легенду полностью
     )
     return fig
 
@@ -364,7 +340,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
     height = max(600, len(all_cabs) * 50)
     plot_w = width - 120
     plot_h = height - 180
-    marker_size = min(plot_w / len(hours), plot_h / len(all_cabs)) * 0.88   # ← чуть меньше
+    marker_size = min(plot_w / len(hours), plot_h / len(all_cabs)) * 0.88
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -374,13 +350,12 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0.5, color='#CCCCCC'),   # ← тонкие серые границы
+            line=dict(width=0.5, color='#CCCCCC'),
         ),
         hovertext=h_list,
         hoverinfo='text',
+        showlegend=False,          # ← скрыть trace 0
     ))
-
-    add_legend(fig, colors, spec_to_code)
 
     fig.update_layout(
         title=f'⏰ Почасовая карта — {selected_date}',
@@ -389,7 +364,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         height=height,
         width=width,
         yaxis=dict(
-            type='category',               # ← только наши категории
+            type='category',
             categoryorder='array',
             categoryarray=all_cabs,
             autorange='reversed',
@@ -411,15 +386,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=80, b=100),
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=-0.3,
-            xanchor='center',
-            x=0.5,
-            font=dict(size=10),
-            itemsizing='constant',
-        ),
+        showlegend=False,          # ← убрать легенду полностью
     )
     return fig
 
@@ -456,13 +423,8 @@ def main():
         st.error("❌ Не удалось распознать данные. Проверьте формат файла.")
         return
 
-    numeric_cabinets = [str(i) for i in range(1, 26)]
-    other_cabinets = [
-        str(c) for c in df['Кабинет'].unique()
-        if str(c) not in numeric_cabinets
-    ]
-    all_cabinets = numeric_cabinets + sorted(other_cabinets, key=cabinet_sort_key)
-    selected_cabinets = all_cabinets
+    # === ТОЛЬКО КАБИНЕТЫ 1–25 ===
+    selected_cabinets = [str(i) for i in range(1, 26)]
 
     all_specs = sorted(df['spec'].unique())
     if 'Пусто' not in all_specs:
@@ -476,17 +438,7 @@ def main():
         )
     }
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("👨‍⚕️ Врачей/записей", df['Доктор'].nunique())
-    with c2:
-        st.metric("🚪 Кабинетов", len(selected_cabinets))
-    with c3:
-        st.metric("📅 Дней в отчёте", df['date_short'].nunique())
-    with c4:
-        st.metric("📝 Записей", len(df))
-
-    st.divider()
+    # === МЕТРИКИ УДАЛЕНЫ ===
 
     with st.sidebar:
         st.header("⚙️ Фильтры")
@@ -497,7 +449,7 @@ def main():
             index=0,
         )
 
-        st.markdown(f"**🚪 Кабинеты:** 1–25 + специальные ({len(selected_cabinets)} всего)")
+        st.markdown("**🚪 Кабинеты:** 1–25")
 
         all_dates_full = sorted(
             df['date_str'].unique(),
@@ -511,7 +463,7 @@ def main():
         if mode == "📅 Обзор по дням":
             date_opt = st.radio(
                 "Диапазон:",
-                ["Последние 30 дней", "Все дни", "Выбрать диапазон"],   # ← убрано 7 дней
+                ["Последние 30 дней", "Все дни", "Выбрать диапазон"],
                 index=0,
             )
             if date_opt == "Все дни":
@@ -603,14 +555,7 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=False)
 
-        df_day = df[df['date_str'] == selected_date]
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.metric("Работающих врачей/записей", df_day['Доктор'].nunique())
-        with c2:
-            st.metric("Занятых кабинетов", df_day['Кабинет'].nunique())
-        with c3:
-            st.metric("Всего часов", round(df_day['hours'].sum(), 1))
+        # === НИЖНИЕ МЕТРИКИ УДАЛЕНЫ ===
 
         with st.expander("📊 Таблица данных за день"):
             show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
