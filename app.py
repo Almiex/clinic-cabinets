@@ -247,7 +247,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0),
+            line=dict(width=0.5, color='#555555'),
         ),
         hovertext=h_list,
         hoverinfo='text',
@@ -350,7 +350,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0.5, color='#CCCCCC'),
+            line=dict(width=1.0, color='#555555'),
         ),
         hovertext=h_list,
         hoverinfo='text',
@@ -391,7 +391,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
     return fig
 
 
-# ==================== НОВАЯ ФУНКЦИЯ: СПЕЦИАЛЬНЫЕ КАБИНЕТЫ ====================
+# ==================== СПЕЦИАЛЬНЫЕ КАБИНЕТЫ ====================
 def create_special_hourly_heatmap(df, selected_date, colors):
     """Почасовая карта для специальных (безномерных) кабинетов."""
     special_cabs = [
@@ -454,14 +454,9 @@ def create_special_hourly_heatmap(df, selected_date, colors):
                     f"<b>Врач:</b> {txt}"
                 )
             else:
-                spec_val = special_spec_map[cab]
-                c_list.append(colors.get(spec_val, '#999'))
-                h_list.append(
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Время:</b> {hr}<br>"
-                    f"<b>Специализация:</b> {spec_val}<br>"
-                    f"Пусто"
-                )
+                # ← ПУСТО: серый цвет, без специализации в hover
+                c_list.append(colors.get('Пусто', '#999'))
+                h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {hr}<br>Пусто")
 
     width = 1450
     height = max(400, len(special_cabs) * 65)
@@ -477,7 +472,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0.5, color='#CCCCCC'),
+            line=dict(width=1.0, color='#555555'),   # ← темные чёткие границы
         ),
         hovertext=h_list,
         hoverinfo='text',
@@ -511,7 +506,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
-        margin=dict(l=300, r=40, t=80, b=100),  # увеличен левый отступ для длинных названий
+        margin=dict(l=300, r=40, t=80, b=100),
         showlegend=False,
     )
     return fig
@@ -519,7 +514,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
-    st.markdown("# 🏥 Тепловая карта загрузки кабинетов")
+    st.markdown("# 🏥 График загрузки кабинетов")
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
@@ -549,7 +544,6 @@ def main():
         st.error("❌ Не удалось распознать данные. Проверьте формат файла.")
         return
 
-    # Только кабинеты 1–25
     selected_cabinets = [str(i) for i in range(1, 26)]
 
     all_specs = sorted(df['spec'].unique())
@@ -567,7 +561,6 @@ def main():
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
-        # Детально по часам — первый и по умолчанию
         mode = st.radio(
             "Режим:",
             ["⏰ Детально по часам", "📅 Обзор по дням"],
@@ -644,7 +637,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # ===== ОСНОВНАЯ ОБЛАСТЬ =====
     if mode == "📅 Обзор по дням":
         st.subheader(
             f"📅 Обзор с {date_range_label} "
@@ -663,7 +655,6 @@ def main():
             show = show.sort_values(['date_str', 'Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
-        # --- СПЕЦИАЛЬНЫЕ КАБИНЕТЫ (последняя дата диапазона) ---
         st.divider()
         st.subheader("🏥 Специальные кабинеты")
         last_short = selected_dates[-1] if selected_dates else None
@@ -691,7 +682,6 @@ def main():
             ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
-        # --- СПЕЦИАЛЬНЫЕ КАБИНЕТЫ (та же выбранная дата) ---
         st.divider()
         st.subheader("🏥 Специальные кабинеты")
         fig_special = create_special_hourly_heatmap(df, selected_date, colors)
