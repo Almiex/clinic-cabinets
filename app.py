@@ -463,14 +463,8 @@ def main():
             index=0,
         )
 
-        all_cabinets = sorted(df['Кабинет'].unique(), key=cabinet_sort_key)
-        selected_cabinets = st.multiselect(
-            "Кабинеты:", all_cabinets, default=all_cabinets
-        )
-
-        if not selected_cabinets:
-            st.warning("Выберите хотя бы один кабинет")
-            return
+    all_cabinets = [str(i) for i in range(1, 26)]
+    selected_cabinets = all_cabinets
 
         all_dates_full = sorted(
             df['date_str'].unique(),
