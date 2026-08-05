@@ -186,6 +186,7 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
     physical_cabs = [c for c in all_cabinets if c in physical_cabinets]
     other_cabs = [c for c in all_cabinets if c not in physical_cabinets]
     
+    # Сортируем физические кабинеты по возрастанию (1, 2, 3, ...)
     physical_cabs_sorted = sorted(physical_cabs, key=lambda x: int(x))
     all_cabs = physical_cabs_sorted + sorted(other_cabs)
     
@@ -223,7 +224,7 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
     grid['cell_text'] = grid['surname'].apply(truncate)
     grid['code'] = grid['spec'].map(lambda s: spec_to_code.get(s, spec_to_code['Пусто']))
     
-    # Создаем текст для тултипа
+    # Создаем детальный текст для тултипа
     grid['hover_text'] = grid.apply(
         lambda row: (
             f"Кабинет: {row['Кабинет']}<br>"
@@ -249,7 +250,11 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
         pos = code / max(n - 1, 1)
         colorscale.append([pos, colors[spec]])
 
-    fig = go.Figure(data=go.Heatmap(
+    # Создаем heatmap с поддержкой hover
+    fig = go.Figure()
+
+    # Добавляем heatmap
+    fig.add_trace(go.Heatmap(
         z=pivot_code.values,
         x=pivot_code.columns,
         y=pivot_code.index,
@@ -268,6 +273,7 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
 
     add_legend(fig, colors, spec_to_code)
 
+    # Настройка осей - кабинеты сверху вниз по возрастанию
     fig.update_layout(
         title='📅 Обзорная тепловая карта (цвет = специализация, текст = врач)',
         xaxis_title='Дата',
@@ -277,7 +283,7 @@ def create_overview_heatmap(df, selected_dates, colors, spec_to_code):
         hovermode='closest',
         yaxis={
             'categoryorder': 'array',
-            'categoryarray': all_cabs[::-1],
+            'categoryarray': all_cabs,  # Сверху вниз по возрастанию
             'dtick': 1,
             'showgrid': True,
             'gridcolor': '#E0E0E0',
@@ -314,6 +320,8 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
     
     physical_cabs = [c for c in all_cabinets if c in physical_cabinets]
     other_cabs = [c for c in all_cabinets if c not in physical_cabinets]
+    
+    # Сортируем физические кабинеты по возрастанию (1, 2, 3, ...)
     physical_cabs_sorted = sorted(physical_cabs, key=lambda x: int(x))
     all_cabs = physical_cabs_sorted + sorted(other_cabs)
     
@@ -383,7 +391,9 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
         text_matrix.append(text_row)
         hover_matrix.append(hover_row)
 
-    fig = go.Figure(data=go.Heatmap(
+    fig = go.Figure()
+
+    fig.add_trace(go.Heatmap(
         z=z_matrix,
         x=hours,
         y=all_cabs,
@@ -402,6 +412,7 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
 
     add_legend(fig, colors, spec_to_code)
 
+    # Настройка осей - кабинеты сверху вниз по возрастанию
     fig.update_layout(
         title=f'⏰ Почасовая карта — {selected_date}',
         xaxis_title='Время',
@@ -411,7 +422,7 @@ def create_hourly_heatmap(df, selected_date, colors, spec_to_code):
         hovermode='closest',
         yaxis={
             'categoryorder': 'array',
-            'categoryarray': all_cabs[::-1],
+            'categoryarray': all_cabs,  # Сверху вниз по возрастанию
             'dtick': 1,
             'showgrid': True,
             'gridcolor': '#E0E0E0',
@@ -584,7 +595,11 @@ def main():
         fig = create_overview_heatmap(
             df, selected_dates, colors, spec_to_code
         )
-        st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': True, 'responsive': True})
+        st.plotly_chart(fig, use_container_width=False, config={
+            'displayModeBar': True,
+            'responsive': True,
+            'displaylogo': False
+        })
 
         with st.expander("📊 Таблица данных"):
             show = df[
@@ -597,7 +612,11 @@ def main():
         fig = create_hourly_heatmap(
             df, selected_date, colors, spec_to_code
         )
-        st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': True, 'responsive': True})
+        st.plotly_chart(fig, use_container_width=False, config={
+            'displayModeBar': True,
+            'responsive': True,
+            'displaylogo': False
+        })
 
         df_day = df[df['date_str'] == selected_date]
         c1, c2, c3 = st.columns(3)
