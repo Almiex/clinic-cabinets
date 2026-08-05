@@ -247,7 +247,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=0.5, color='#FFFFFF'),
+            line=dict(width=0.5, color='#555555'),
         ),
         hovertext=h_list,
         hoverinfo='text',
@@ -472,7 +472,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
             symbol='square',
             size=marker_size,
             color=c_list,
-            line=dict(width=1.0, color='#555555'),   # ← темные чёткие границы
+            line=dict(width=1.0, color='#FFFFFF'),   # ← темные чёткие границы
         ),
         hovertext=h_list,
         hoverinfo='text',
