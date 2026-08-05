@@ -251,7 +251,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         ),
         hovertext=h_list,
         hoverinfo='text',
-        showlegend=False,          # ← скрыть trace 0
+        showlegend=False,
     ))
 
     fig.update_layout(
@@ -283,7 +283,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=80, b=60),
-        showlegend=False,          # ← убрать легенду полностью
+        showlegend=False,
     )
     return fig
 
@@ -354,7 +354,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         ),
         hovertext=h_list,
         hoverinfo='text',
-        showlegend=False,          # ← скрыть trace 0
+        showlegend=False,
     ))
 
     fig.update_layout(
@@ -386,7 +386,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=80, b=100),
-        showlegend=False,          # ← убрать легенду полностью
+        showlegend=False,
     )
     return fig
 
@@ -423,7 +423,7 @@ def main():
         st.error("❌ Не удалось распознать данные. Проверьте формат файла.")
         return
 
-    # === ТОЛЬКО КАБИНЕТЫ 1–25 ===
+    # Только кабинеты 1–25
     selected_cabinets = [str(i) for i in range(1, 26)]
 
     all_specs = sorted(df['spec'].unique())
@@ -438,14 +438,13 @@ def main():
         )
     }
 
-    # === МЕТРИКИ УДАЛЕНЫ ===
-
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
+        # 1. Детально по часам — первый и по умолчанию
         mode = st.radio(
             "Режим:",
-            ["📅 Обзор по дням", "⏰ Детально по часам"],
+            ["⏰ Детально по часам", "📅 Обзор по дням"],
             index=0,
         )
 
@@ -461,45 +460,34 @@ def main():
         )
 
         if mode == "📅 Обзор по дням":
-            date_opt = st.radio(
-                "Диапазон:",
-                ["Последние 30 дней", "Все дни", "Выбрать диапазон"],
-                index=0,
+            # 2. Только выбор диапазона + подсказка
+            st.caption("💡 Для корректного отображения выбирайте диапазон до 40 дней")
+            
+            if len(all_dates_full) > 0:
+                min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y')
+                max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y')
+            else:
+                min_date = datetime.now()
+                max_date = datetime.now()
+
+            date_range = st.date_input(
+                "Выберите диапазон:",
+                value=(min_date, max_date),
+                min_value=min_date - timedelta(days=365),
+                max_value=max_date + timedelta(days=365),
             )
-            if date_opt == "Все дни":
-                selected_dates = all_dates_short
-                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
-            elif date_opt == "Последние 30 дней":
-                selected_dates = (all_dates_short[-30:]
-                                  if len(all_dates_short) >= 30
-                                  else all_dates_short)
+            if len(date_range) == 2:
+                start, end = date_range
+                date_list = []
+                current = start
+                while current <= end:
+                    date_list.append(current.strftime('%d.%m'))
+                    current += timedelta(days=1)
+                selected_dates = date_list
                 date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
             else:
-                if len(all_dates_full) > 0:
-                    min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y')
-                    max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y')
-                else:
-                    min_date = datetime.now()
-                    max_date = datetime.now()
-
-                date_range = st.date_input(
-                    "Выберите диапазон:",
-                    value=(min_date, max_date),
-                    min_value=min_date - timedelta(days=365),
-                    max_value=max_date + timedelta(days=365),
-                )
-                if len(date_range) == 2:
-                    start, end = date_range
-                    date_list = []
-                    current = start
-                    while current <= end:
-                        date_list.append(current.strftime('%d.%m'))
-                        current += timedelta(days=1)
-                    selected_dates = date_list
-                    date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
-                else:
-                    selected_dates = all_dates_short[-7:]
-                    date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
+                selected_dates = all_dates_short[-7:]
+                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
             selected_date = None
         else:
             selected_date = st.selectbox("Дата:", all_dates_full)
@@ -509,7 +497,8 @@ def main():
         st.divider()
         st.markdown("**🩺 Специализации:**")
         for spec in sorted(spec_to_code.keys()):
-            if spec in ('Пусто', 'Нет данных'):
+            # 3. Скрыть Администрацию
+            if spec in ('Пусто', 'Нет данных', 'Администрация'):
                 continue
             color = colors.get(spec, '#999')
             st.markdown(
@@ -555,9 +544,8 @@ def main():
         )
         st.plotly_chart(fig, use_container_width=False)
 
-        # === НИЖНИЕ МЕТРИКИ УДАЛЕНЫ ===
-
         with st.expander("📊 Таблица данных за день"):
+            df_day = df[df['date_str'] == selected_date]
             show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
                 ['Кабинет', 'Доктор', 'spec', 'Период', 'hours']
             ].sort_values(['Кабинет', 'Период'])
