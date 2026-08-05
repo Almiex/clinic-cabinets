@@ -321,9 +321,9 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         if 'операционная' in s_lower:
             return 'о'
 
-        # Перевязочная → "пк."
+        # Перевязочная → "пк"
         if 'перевязочная' in s_lower:
-            return 'пк.'
+            return 'пк'
 
         # Кабинет / стационар → аббревиатура из первых букв слов, строчные, без точки
         if 'кабинет' in s_lower or 'стационар' in s_lower:
