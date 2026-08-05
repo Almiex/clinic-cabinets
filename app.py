@@ -232,7 +232,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         x_list.append(row['date_short'])
         y_list.append(row['Кабинет'])
         spec = row['spec']
-        c_list.append(colors.get(spec, colors['Прочее']))
+        c_list.append(colors.get(spec, '#999'))   # ← безопасный fallback
         if spec == 'Нет данных':
             h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Нет данных")
         elif spec == 'Пусто':
@@ -246,7 +246,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
                 f"<b>Часов:</b> {row['hours']:.1f}"
             )
 
-    # Размер маркера подгоняем под плотность сетки
     width = max(900, len(all_dates) * 90)
     height = max(500, len(all_cabs) * 50)
     plot_w = width - 120
@@ -331,7 +330,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         end = time_to_min(row['end_time'])
         return start <= minutes < end
 
-    # --- go.Scatter: каждый 30-мин слот — квадратный маркер ---
     x_list, y_list, c_list, h_list = [], [], [], []
     for cab in all_cabs:
         cab_df = df_day[df_day['Кабинет'] == cab]
@@ -348,7 +346,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                 unique_docs = list(dict.fromkeys(docs))
                 txt = ', '.join(unique_docs)
                 spec_val = specs[0]
-                c_list.append(colors.get(spec_val, colors['Прочее']))
+                c_list.append(colors.get(spec_val, '#999'))   # ← безопасный fallback
                 h_list.append(
                     f"<b>Кабинет:</b> {cab}<br>"
                     f"<b>Время:</b> {h}<br>"
@@ -356,7 +354,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                     f"<b>Врач:</b> {txt}"
                 )
             else:
-                c_list.append(colors['Пусто'])
+                c_list.append(colors.get('Пусто', '#999'))
                 h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто")
 
     width = 1450
@@ -454,7 +452,6 @@ def main():
         st.error("❌ Не удалось распознать данные. Проверьте формат файла.")
         return
 
-    # Фиксированный список кабинетов: 1-25 + остальные из данных
     numeric_cabinets = [str(i) for i in range(1, 26)]
     other_cabinets = [
         str(c) for c in df['Кабинет'].unique()
@@ -463,7 +460,6 @@ def main():
     all_cabinets = numeric_cabinets + sorted(other_cabinets, key=cabinet_sort_key)
     selected_cabinets = all_cabinets
 
-    # Цвета
     all_specs = sorted(df['spec'].unique())
     if 'Пусто' not in all_specs:
         all_specs = ['Пусто'] + all_specs
@@ -476,7 +472,6 @@ def main():
         )
     }
 
-    # Метрики
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric("👨‍⚕️ Врачей/записей", df['Доктор'].nunique())
@@ -489,7 +484,6 @@ def main():
 
     st.divider()
 
-    # ===== БОКОВАЯ ПАНЕЛЬ =====
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
@@ -575,18 +569,17 @@ def main():
             )
         st.markdown(
             f"<span style='display:inline-block; width:12px; height:12px; "
-            f"background:{colors['Пусто']}; border-radius:2px; margin-right:6px;'>"
+            f"background:{colors.get('Пусто', '#999')}; border-radius:2px; margin-right:6px;'>"
             f"</span>Пусто",
             unsafe_allow_html=True,
         )
         st.markdown(
             f"<span style='display:inline-block; width:12px; height:12px; "
-            f"background:{colors['Нет данных']}; border-radius:2px; margin-right:6px;'>"
+            f"background:{colors.get('Нет данных', '#999')}; border-radius:2px; margin-right:6px;'>"
             f"</span>Нет данных",
             unsafe_allow_html=True,
         )
 
-    # ===== ОСНОВНАЯ ОБЛАСТЬ =====
     if mode == "📅 Обзор по дням":
         st.subheader(
             f"📅 Обзор с {date_range_label} "
