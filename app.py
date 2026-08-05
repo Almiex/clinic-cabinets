@@ -668,7 +668,7 @@ def main():
         )
 
         if mode == "📅 Обзор по дням":
-            st.caption("💡 Для корректного отображения выбирайте диапазон до 40 дней")
+            #st.caption("💡 Для корректного отображения выбирайте диапазон до 40 дней")
             
             if len(all_dates_full) > 0:
                 min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y')
