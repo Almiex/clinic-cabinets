@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, time, timedelta
 import re
-import numpy as np
 
 st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
 
@@ -227,59 +226,45 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         lambda r: pd.Series(get_cell_info(r)), axis=1
     )
 
-    grid['code'] = grid['spec'].map(lambda s: spec_to_code.get(s, spec_to_code['Нет данных']))
+    # --- go.Scatter: каждая ячейка — квадратный маркер ---
+    x_list, y_list, c_list, h_list = [], [], [], []
+    for _, row in grid.iterrows():
+        x_list.append(row['date_short'])
+        y_list.append(row['Кабинет'])
+        spec = row['spec']
+        c_list.append(colors.get(spec, colors['Прочее']))
+        if spec == 'Нет данных':
+            h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Нет данных")
+        elif spec == 'Пусто':
+            h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Пусто")
+        else:
+            h_list.append(
+                f"<b>Кабинет:</b> {row['Кабинет']}<br>"
+                f"<b>Дата:</b> {row['date_short']}<br>"
+                f"<b>Специализация:</b> {spec}<br>"
+                f"<b>Врач(и):</b> {row['surname']}<br>"
+                f"<b>Часов:</b> {row['hours']:.1f}"
+            )
 
-    pivot_code = grid.pivot(index='Кабинет', columns='date_short', values='code')
-    pivot_code = pivot_code.reindex(index=all_cabs, columns=all_dates)
-    pivot_code = pivot_code.fillna(spec_to_code['Нет данных'])
+    # Размер маркера подгоняем под плотность сетки
+    width = max(900, len(all_dates) * 90)
+    height = max(500, len(all_cabs) * 50)
+    plot_w = width - 120
+    plot_h = height - 140
+    marker_size = min(plot_w / len(all_dates), plot_h / len(all_cabs)) * 0.92
 
-    pivot_spec = grid.pivot(index='Кабинет', columns='date_short', values='spec')
-    pivot_spec = pivot_spec.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
-    pivot_docs = grid.pivot(index='Кабинет', columns='date_short', values='surname')
-    pivot_docs = pivot_docs.reindex(index=all_cabs, columns=all_dates).fillna('Нет данных')
-    pivot_hours = grid.pivot(index='Кабинет', columns='date_short', values='hours')
-    pivot_hours = pivot_hours.reindex(index=all_cabs, columns=all_dates).fillna(0.0)
-
-    # === 100% рабочий hover: text + hovertemplate ===
-    hover_text = []
-    for i, cab in enumerate(all_cabs):
-        row = []
-        for j, d in enumerate(all_dates):
-            spec = pivot_spec.iloc[i, j]
-            docs = pivot_docs.iloc[i, j]
-            hrs = pivot_hours.iloc[i, j]
-            if spec == 'Нет данных':
-                row.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {d}<br>Нет данных")
-            elif spec == 'Пусто':
-                row.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {d}<br>Пусто")
-            else:
-                row.append(
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Дата:</b> {d}<br>"
-                    f"<b>Специализация:</b> {spec}<br>"
-                    f"<b>Врач(и):</b> {docs}<br>"
-                    f"<b>Часов:</b> {hrs:.1f}"
-                )
-        hover_text.append(row)
-
-    n = len(spec_to_code)
-    colorscale = []
-    for spec, code in sorted(spec_to_code.items(), key=lambda x: x[1]):
-        pos = code / max(n - 1, 1)
-        colorscale.append([pos, colors[spec]])
-
-    fig = go.Figure(data=go.Heatmap(
-        z=pivot_code.values,
-        x=all_dates,
-        y=all_cabs,
-        text=hover_text,               # ← 2D list of strings
-        hovertemplate='%{text}<extra></extra>',
-        colorscale=colorscale,
-        showscale=False,
-        zmin=0,
-        zmax=n - 1,
-        xgap=2,
-        ygap=2,
+    fig = go.Figure(data=go.Scatter(
+        x=x_list,
+        y=y_list,
+        mode='markers',
+        marker=dict(
+            symbol='square',
+            size=marker_size,
+            color=c_list,
+            line=dict(width=0),
+        ),
+        hovertext=h_list,
+        hoverinfo='text',
     ))
 
     add_legend(fig, colors, spec_to_code)
@@ -288,8 +273,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
         title='📅 Обзорная тепловая карта (цвет = специализация)',
         xaxis_title='Дата',
         yaxis_title='Кабинет',
-        height=max(500, len(all_cabs) * 48),
-        width=max(900, len(all_dates) * 100),
+        height=height,
+        width=width,
         yaxis=dict(
             categoryorder='array',
             categoryarray=all_cabs,
@@ -300,6 +285,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors, spec_
             gridwidth=1,
         ),
         xaxis=dict(
+            categoryorder='array',
+            categoryarray=all_dates,
             dtick=1,
             showgrid=True,
             gridcolor='#E0E0E0',
@@ -344,18 +331,10 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         end = time_to_min(row['end_time'])
         return start <= minutes < end
 
-    n = len(spec_to_code)
-    colorscale = []
-    for spec, code in sorted(spec_to_code.items(), key=lambda x: x[1]):
-        pos = code / max(n - 1, 1)
-        colorscale.append([pos, colors[spec]])
-
-    z_matrix = []
-    hover_text = []
-
+    # --- go.Scatter: каждый 30-мин слот — квадратный маркер ---
+    x_list, y_list, c_list, h_list = [], [], [], []
     for cab in all_cabs:
         cab_df = df_day[df_day['Кабинет'] == cab]
-        z_row, hover_row = [], []
         for h in hours:
             docs = []
             specs = []
@@ -363,35 +342,41 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
                 if is_working(r, h):
                     docs.append(r['surname'])
                     specs.append(r['spec'])
+            x_list.append(h)
+            y_list.append(cab)
             if docs:
                 unique_docs = list(dict.fromkeys(docs))
                 txt = ', '.join(unique_docs)
                 spec_val = specs[0]
-                z_row.append(spec_to_code.get(spec_val, spec_to_code['Пусто']))
-                hover_row.append(
+                c_list.append(colors.get(spec_val, colors['Прочее']))
+                h_list.append(
                     f"<b>Кабинет:</b> {cab}<br>"
                     f"<b>Время:</b> {h}<br>"
                     f"<b>Специализация:</b> {spec_val}<br>"
                     f"<b>Врач:</b> {txt}"
                 )
             else:
-                z_row.append(spec_to_code['Пусто'])
-                hover_row.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто")
-        z_matrix.append(z_row)
-        hover_text.append(hover_row)
+                c_list.append(colors['Пусто'])
+                h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто")
 
-    fig = go.Figure(data=go.Heatmap(
-        z=z_matrix,
-        x=hours,
-        y=all_cabs,
-        text=hover_text,               # ← 2D list of strings
-        hovertemplate='%{text}<extra></extra>',
-        colorscale=colorscale,
-        showscale=False,
-        zmin=0,
-        zmax=n - 1,
-        xgap=1,
-        ygap=2,
+    width = 1450
+    height = max(600, len(all_cabs) * 50)
+    plot_w = width - 120
+    plot_h = height - 180
+    marker_size = min(plot_w / len(hours), plot_h / len(all_cabs)) * 0.92
+
+    fig = go.Figure(data=go.Scatter(
+        x=x_list,
+        y=y_list,
+        mode='markers',
+        marker=dict(
+            symbol='square',
+            size=marker_size,
+            color=c_list,
+            line=dict(width=0),
+        ),
+        hovertext=h_list,
+        hoverinfo='text',
     ))
 
     add_legend(fig, colors, spec_to_code)
@@ -400,8 +385,8 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
         title=f'⏰ Почасовая карта — {selected_date}',
         xaxis_title='Время',
         yaxis_title='Кабинет',
-        height=max(520, len(all_cabs) * 48),
-        width=1450,
+        height=height,
+        width=width,
         yaxis=dict(
             categoryorder='array',
             categoryarray=all_cabs,
@@ -412,6 +397,8 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors, spec_to_
             gridwidth=1,
         ),
         xaxis=dict(
+            categoryorder='array',
+            categoryarray=hours,
             dtick=1,
             showgrid=True,
             gridcolor='#E0E0E0',
