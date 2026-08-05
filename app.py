@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime, time, timedelta
 import re
 
-st.set_page_config(page_title="Тепловая карта кабинетов", layout="wide")
+st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46          # сторона клетки в пикселях
@@ -264,7 +264,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     ))
 
     fig.update_layout(
-        title='📅 Обзорная тепловая карта',
+        title='📅 Обзорный график',
         xaxis_title='Дата',
         yaxis_title='Кабинет',
         height=height,
@@ -767,7 +767,7 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
-    st.markdown("# 🏥 Тепловая карта загрузки кабинетов")
+    st.markdown("# 🏥 График загрузки кабинетов (Клиника в Северном)")
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
