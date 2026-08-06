@@ -615,7 +615,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 cell_data.setdefault(key, []).append(r)
 
     # === 2. Определяем, какие кабинеты нужно разделить на весь день ===
-    # Разбиваем ТОЛЬКО если в каком-то часу есть special + 2+ обычных врача
     needs_split = set()
     for (cab, h), entries in cell_data.items():
         special_count = sum(1 for e in entries if is_special(e['surname']))
@@ -647,15 +646,16 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
                 if matching:
                     display_text = abbreviate(matching[0]['surname'])
+                    base_spec = matching[0]['spec']
+                    cell_color = colors.get(base_spec, '#999')  # цвет ВРАЧА, обычный
                 else:
                     display_text = abbreviate(s_entry['surname'])
-
-                base_color = colors.get(s_entry['spec'], '#999')
-                # ВСЕГДА светлый цвет для перевязочной
-                if 'перевязочная' in s_entry['surname'].lower():
-                    cell_color = dull_color(base_color, 0.4)
-                else:
-                    cell_color = base_color
+                    base_spec = s_entry['spec']
+                    # Только перевязочная — светлый
+                    if 'перевязочная' in s_entry['surname'].lower():
+                        cell_color = dull_color(colors.get(base_spec, '#999'), 0.4)
+                    else:
+                        cell_color = colors.get(base_spec, '#999')
 
                 display_cells.append({
                     'x': h,
@@ -665,7 +665,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                     'hover': (
                         f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
                         f"<b>Время:</b> {h}<br>"
-                        f"<b>Специализация:</b> {s_entry['spec']}<br>"
+                        f"<b>Специализация:</b> {base_spec}<br>"
                         f"<b>Врач:</b> {txt}"
                     )
                 })
@@ -691,71 +691,45 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 })
 
         else:
-            # === НЕ разбиваем: special + 1 обычный или просто несколько врачей ===
-            if len(entries) == 1:
-                r = entries[0]
-                base_color = colors.get(r['spec'], '#999')
-                if is_special(r['surname']) and 'перевязочная' in r['surname'].lower():
-                    cell_color = dull_color(base_color, 0.4)
+            # === НЕ разбиваем ===
+            normal = [e for e in entries if not is_special(e['surname'])]
+            special = [e for e in entries if is_special(e['surname'])]
+
+            docs = list(dict.fromkeys([e['surname'] for e in entries]))
+            txt = ', '.join(docs)
+
+            if normal:
+                # Есть врач — цвет врача, обычный
+                base_spec = normal[0]['spec']
+                cell_color = colors.get(base_spec, '#999')
+                display_text = abbreviate(normal[0]['surname'])
+            elif special:
+                # Только special
+                base_spec = special[0]['spec']
+                if 'перевязочная' in special[0]['surname'].lower():
+                    cell_color = dull_color(colors.get(base_spec, '#999'), 0.4)
                 else:
-                    cell_color = base_color
-                display_text = abbreviate(r['surname'])
-                hover = (
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Время:</b> {h}<br>"
-                    f"<b>Специализация:</b> {r['spec']}<br>"
-                    f"<b>Врач:</b> {r['surname']}"
-                )
+                    cell_color = colors.get(base_spec, '#999')
+                display_text = abbreviate(special[0]['surname'])
             else:
-                special_entries = [e for e in entries if is_special(e['surname'])]
-                normal_entries = [e for e in entries if not is_special(e['surname'])]
-
-                if special_entries:
-                    # Есть special — берём его цвет (светлый для перевязочной)
-                    s_entry = special_entries[0]
-                    base_color = colors.get(s_entry['spec'], '#999')
-                    if 'перевязочная' in s_entry['surname'].lower():
-                        cell_color = dull_color(base_color, 0.4)
-                    else:
-                        cell_color = base_color
-
-                    # Текст показываем обычного врача, если он есть
-                    if normal_entries:
-                        display_text = abbreviate(normal_entries[0]['surname'])
-                    else:
-                        display_text = abbreviate(s_entry['surname'])
-
-                    docs = list(dict.fromkeys([e['surname'] for e in entries]))
-                    txt = ', '.join(docs)
-                    hover = (
-                        f"<b>Кабинет:</b> {cab}<br>"
-                        f"<b>Время:</b> {h}<br>"
-                        f"<b>Специализация:</b> {s_entry['spec']}<br>"
-                        f"<b>Врач:</b> {txt}"
-                    )
-                else:
-                    # Нет special — стандартное поведение
-                    r = entries[0]
-                    cell_color = colors.get(r['spec'], '#999')
-                    docs = list(dict.fromkeys([e['surname'] for e in entries]))
-                    txt = ', '.join(docs)
-                    display_text = abbreviate(r['surname'])
-                    hover = (
-                        f"<b>Кабинет:</b> {cab}<br>"
-                        f"<b>Время:</b> {h}<br>"
-                        f"<b>Специализация:</b> {r['spec']}<br>"
-                        f"<b>Врач:</b> {txt}"
-                    )
+                base_spec = 'Прочее'
+                cell_color = colors.get('Прочее', '#999')
+                display_text = ''
 
             display_cells.append({
                 'x': h,
                 'y': str(cab),
                 'color': cell_color,
                 'text': display_text,
-                'hover': hover
+                'hover': (
+                    f"<b>Кабинет:</b> {cab}<br>"
+                    f"<b>Время:</b> {h}<br>"
+                    f"<b>Специализация:</b> {base_spec}<br>"
+                    f"<b>Врач:</b> {txt}"
+                )
             })
 
-    # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
+    # === 4. Формируем ось Y ===
     base_cabs = set(str(c) for c in selected_cabinets)
     split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
     final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
