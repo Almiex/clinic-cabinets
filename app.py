@@ -124,6 +124,60 @@ def assign_colors(all_specs):
     return colors
 
 
+# ==================== ИЗВЛЕЧЕНИЕ НАЗВАНИЯ КЛИНИКИ ====================
+def clean_clinic_name(name):
+    if pd.isna(name):
+        return ''
+    name = str(name).strip()
+
+    # Удаляем числовые коды в начале/конце (001, 123 и т.д.)
+    name = re.sub(r'^\d{2,}\s*[-–—.]?\s*', '', name)
+    name = re.sub(r'\s*[-–—.]?\s*\d{2,}$', '', name)
+
+    # Удаляем формы собственности и технические аббревиатуры
+    forms = [
+        'ООО', 'ОАО', 'ЗАО', 'АО', 'ИП', 'ПАО', 'НАО',
+        'ФГБУ', 'ФГАОУ', 'ФГБОУ', 'ФГАУ', 'МБУ', 'ГБУ',
+        'ГБУЗ', 'МБУЗ', 'ФМБА', 'МИНЗДРАВ'
+    ]
+    for form in forms:
+        name = re.sub(rf'\b{re.escape(form)}\b', '', name, flags=re.IGNORECASE)
+
+    # Убираем лишние знаки препинания по краям
+    name = re.sub(r'^[.,;:\-\s]+', '', name)
+    name = re.sub(r'[.,;:\-\s]+$', '', name)
+    # Схлопываем множественные пробелы
+    name = re.sub(r'\s+', ' ', name).strip()
+
+    return name
+
+
+def extract_clinic_name(uploaded_file):
+    """Извлекает название клиники из первых строк Листа 2."""
+    try:
+        df_raw = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, nrows=15)
+    except Exception:
+        try:
+            df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None, nrows=15)
+        except Exception:
+            return ''
+
+    candidates = []
+    for col in df_raw.columns:
+        for val in df_raw[col].dropna():
+            s = str(val).strip()
+            # Ищем осмысленный текст достаточной длины
+            if len(s) >= 5 and not s.lower().startswith('http') and not s.replace('.', '').replace(',', '').isdigit():
+                candidates.append(s)
+
+    if not candidates:
+        return ''
+
+    # Самая длинная строка — скорее всего название клиники
+    raw_name = max(candidates, key=len)
+    return clean_clinic_name(raw_name)
+
+
 # ==================== ПАРСИНГ ====================
 def parse_excel_new(uploaded_file):
     try:
@@ -293,258 +347,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     return fig
 
 
-# def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
-#     df_day = df[(df['date_str'] == selected_date) &
-#                 df['Кабинет'].isin(selected_cabinets)].copy()
-
-#     hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
-
-#     def time_to_min(t):
-#         if t is None:
-#             return None
-#         return t.hour * 60 + t.minute
-
-#     def is_working(row, time_str):
-#         if pd.isna(row['start_time']) or pd.isna(row['end_time']):
-#             return False
-#         h, m = map(int, time_str.split(':'))
-#         minutes = h * 60 + m
-#         start = time_to_min(row['start_time'])
-#         end = time_to_min(row['end_time'])
-#         return start <= minutes < end
-
-#     def dull_color(hex_color, factor=0.4):
-#         hex_color = hex_color.lstrip('#')
-#         r = int(hex_color[0:2], 16)
-#         g = int(hex_color[2:4], 16)
-#         b = int(hex_color[4:6], 16)
-#         r = int(r + (255 - r) * factor)
-#         g = int(g + (255 - g) * factor)
-#         b = int(b + (255 - b) * factor)
-#         return f'#{r:02x}{g:02x}{b:02x}'
-
-#     VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ'
-#     SPECIAL_KEYWORDS = ['кабинет', 'стационар', 'хирургия', 'операционная', 'рентген', 'перевязочная']
-
-#     def is_special(name):
-#         if not name:
-#             return False
-#         return any(kw in name.lower() for kw in SPECIAL_KEYWORDS)
-
-#     def abbreviate(name):
-#         if not name:
-#             return ''
-#         s_lower = name.lower()
-#         if 'операционная' in s_lower:
-#             return 'о'
-#         if 'перевязочная' in s_lower:
-#             return 'пк.'
-#         if 'кабинет' in s_lower or 'стационар' in s_lower:
-#             words = name.split()
-#             return ''.join(w[0].lower() for w in words if w)
-#         if len(name) >= 4 and name[1] in VOWELS and name[2] in VOWELS:
-#             return name[:4]
-#         elif len(name) >= 3 and name[2] in VOWELS:
-#             return name[:2] + '.'
-#         elif len(name) >= 3:
-#             return name[:3] + '.'
-#         elif len(name) == 2:
-#             return name[:2] + '.'
-#         elif len(name) == 1:
-#             return name[0] + '.'
-#         return ''
-
-#     # === 1. Собираем записи по каждой клетке ===
-#     cell_data = {}
-#     for _, r in df_day.iterrows():
-#         for h in hours:
-#             if is_working(r, h):
-#                 key = (r['Кабинет'], h)
-#                 cell_data.setdefault(key, []).append(r)
-
-#     # === 2. Определяем, какие кабинеты нужно разделить на весь день ===
-#     needs_split = set()
-#     for (cab, h), entries in cell_data.items():
-#         if len(entries) > 1 and any(is_special(e['surname']) for e in entries):
-#             needs_split.add(cab)
-
-#     # === 3. Формируем клетки ===
-#     display_cells = []
-
-#     for (cab, h), entries in cell_data.items():
-#         if cab in needs_split:
-#             special = [e for e in entries if is_special(e['surname'])]
-#             normal = [e for e in entries if not is_special(e['surname'])]
-
-#             used_normals = set()
-#             sub_idx = 1
-
-#             for s_entry in special:
-#                 matching = []
-#                 for n_entry in normal:
-#                     if n_entry.name not in used_normals and n_entry['spec'].lower() in s_entry['surname'].lower():
-#                         matching.append(n_entry)
-#                         used_normals.add(n_entry.name)
-
-#                 docs = [s_entry['surname']] + [m['surname'] for m in matching]
-#                 docs_unique = list(dict.fromkeys(docs))
-#                 txt = ', '.join(docs_unique)
-
-#                 if matching:
-#                     display_text = abbreviate(matching[0]['surname'])
-#                     cell_color = colors.get(s_entry['spec'], '#999')
-#                 else:
-#                     display_text = abbreviate(s_entry['surname'])
-#                     base_color = colors.get(s_entry['spec'], '#999')
-#                     if 'перевязочная' in s_entry['surname'].lower():
-#                         cell_color = dull_color(base_color, 0.4)
-#                     else:
-#                         cell_color = base_color
-
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': f"{cab}.{sub_idx}",
-#                     'color': cell_color,
-#                     'text': display_text,
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {s_entry['spec']}<br>"
-#                         f"<b>Врач:</b> {txt}"
-#                     )
-#                 })
-#                 sub_idx += 1
-
-#             unused = [e for e in normal if e.name not in used_normals]
-#             if unused:
-#                 specs = [u['spec'] for u in unused]
-#                 docs = list(dict.fromkeys([u['surname'] for u in unused]))
-#                 txt = ', '.join(docs)
-
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': f"{cab}.{sub_idx}",
-#                     'color': colors.get(specs[0], '#999'),
-#                     'text': abbreviate(unused[0]['surname']),
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}.{sub_idx}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {specs[0]}<br>"
-#                         f"<b>Врач:</b> {txt}"
-#                     )
-#                 })
-
-#         else:
-#             if len(entries) == 1:
-#                 r = entries[0]
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': str(cab),
-#                     'color': colors.get(r['spec'], '#999'),
-#                     'text': abbreviate(r['surname']),
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {r['spec']}<br>"
-#                         f"<b>Врач:</b> {r['surname']}"
-#                     )
-#                 })
-#             else:
-#                 r = entries[0]
-#                 docs = list(dict.fromkeys([e['surname'] for e in entries]))
-#                 txt = ', '.join(docs)
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': str(cab),
-#                     'color': colors.get(r['spec'], '#999'),
-#                     'text': abbreviate(r['surname']),
-#                     'hover': (
-#                         f"<b>Кабинет:</b> {cab}<br>"
-#                         f"<b>Время:</b> {h}<br>"
-#                         f"<b>Специализация:</b> {r['spec']}<br>"
-#                         f"<b>Врач:</b> {txt}"
-#                     )
-#                 })
-
-#     # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
-#     base_cabs = set(str(c) for c in selected_cabinets)
-#     split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
-#     final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
-#     all_display_y = sorted(final_cabs, key=cabinet_sort_key)
-
-#     # === 5. Пустые клетки ===
-#     filled = set((c['x'], c['y']) for c in display_cells)
-#     for cab in all_display_y:
-#         for h in hours:
-#             if (h, cab) not in filled:
-#                 display_cells.append({
-#                     'x': h,
-#                     'y': cab,
-#                     'color': colors.get('Пусто', '#999'),
-#                     'text': '',
-#                     'hover': f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {h}<br>Пусто"
-#                 })
-
-#     display_cells.sort(key=lambda c: (cabinet_sort_key(c['y']), c['x']))
-
-#     x_list = [c['x'] for c in display_cells]
-#     y_list = [c['y'] for c in display_cells]
-#     c_list = [c['color'] for c in display_cells]
-#     t_list = [c['text'] for c in display_cells]
-#     h_list = [c['hover'] for c in display_cells]
-
-#     n_rows = len(all_display_y)
-#     n_cols = len(hours)
-#     height = n_rows * CELL_SIZE + 160
-#     width = n_cols * CELL_SIZE + 120
-
-#     fig = go.Figure(data=go.Scatter(
-#         x=x_list,
-#         y=y_list,
-#         mode='markers+text',
-#         marker=dict(
-#             symbol='square',
-#             size=MARKER_SIZE,
-#             color=c_list,
-#             line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
-#         ),
-#         text=t_list,
-#         textposition='middle center',
-#         textfont=dict(size=13, color='white'),
-#         hovertext=h_list,
-#         hoverinfo='text',
-#         showlegend=False,
-#     ))
-
-#     fig.update_layout(
-#         title=f'⏰ Почасовая карта — {selected_date}',
-#         xaxis_title='Время',
-#         yaxis_title='Кабинет',
-#         height=height,
-#         width=width,
-#         yaxis=dict(
-#             type='category',
-#             categoryorder='array',
-#             categoryarray=all_display_y,
-#             autorange='reversed',
-#             dtick=1,
-#             showgrid=False,
-#         ),
-#         xaxis=dict(
-#             categoryorder='array',
-#             categoryarray=hours,
-#             dtick=1,
-#             showgrid=False,
-#             tickangle=45,
-#         ),
-#         plot_bgcolor='white',
-#         paper_bgcolor='white',
-#         font=dict(size=12),
-#         margin=dict(l=80, r=40, t=60, b=100),
-#         showlegend=False,
-#     )
-#     return fig
-
 def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     df_day = df[(df['date_str'] == selected_date) &
                 df['Кабинет'].isin(selected_cabinets)].copy()
@@ -615,6 +417,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 cell_data.setdefault(key, []).append(r)
 
     # === 2. Определяем, какие кабинеты нужно разделить на весь день ===
+    # Разбиваем ТОЛЬКО если в каком-то часу есть special + 2+ обычных врача
     needs_split = set()
     for (cab, h), entries in cell_data.items():
         special_count = sum(1 for e in entries if is_special(e['surname']))
@@ -729,7 +532,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 )
             })
 
-    # === 4. Формируем ось Y ===
+    # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
     base_cabs = set(str(c) for c in selected_cabinets)
     split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
     final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
@@ -1030,7 +833,23 @@ def create_special_hourly_heatmap(df, selected_date, colors):
 
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
-    st.markdown("# 🏥 График загрузки кабинетов (Клиника в Северном)")
+    uploaded_file = st.file_uploader(
+        "📁 Загрузите отчёт Excel ( .xlsx)", type=['xlsx', 'xls']
+    )
+
+    if uploaded_file is None:
+        st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
+        return
+
+    # --- Извлекаем название клиники из файла ---
+    clinic_name = extract_clinic_name(uploaded_file)
+    uploaded_file.seek(0)  # сброс указателя для повторного чтения
+
+    if clinic_name:
+        st.markdown(f"# 🏥 График загрузки кабинетов ({clinic_name})")
+    else:
+        st.markdown("# 🏥 График загрузки кабинетов")
+
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
@@ -1040,14 +859,6 @@ def main():
         "</p>",
         unsafe_allow_html=True,
     )
-
-    uploaded_file = st.file_uploader(
-        "📁 Загрузите отчёт Excel ( .xlsx)", type=['xlsx', 'xls']
-    )
-
-    if uploaded_file is None:
-        st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
-        return
 
     with st.spinner('⏳ Читаем и обрабатываем данные…'):
         df = parse_excel_new(uploaded_file)
