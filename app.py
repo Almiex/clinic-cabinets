@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, time, timedelta
 import re
+import io
 
 st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
 
@@ -251,12 +252,12 @@ def clean_clinic_name(name):
     return name
 
 
-def extract_clinic_name(uploaded_file):
+def extract_clinic_name(file_bytes):
     try:
-        df_raw = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, nrows=15)
+        df_raw = pd.read_excel(io.BytesIO(file_bytes), sheet_name='Лист2', header=None, nrows=15)
     except Exception:
         try:
-            df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None, nrows=15)
+            df_raw = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, nrows=15)
         except Exception:
             return ''
     candidates = []
@@ -272,12 +273,13 @@ def extract_clinic_name(uploaded_file):
 
 
 # ==================== ПАРСИНГ ====================
-def parse_excel_new(uploaded_file):
+@st.cache_data(show_spinner=False)
+def parse_excel_new(file_bytes):
     """Читает Excel, автоматически находя начало данных."""
     try:
-        preview = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, nrows=20)
+        preview = pd.read_excel(io.BytesIO(file_bytes), sheet_name='Лист2', header=None, nrows=20)
     except Exception:
-        preview = pd.read_excel(uploaded_file, sheet_name=0, header=None, nrows=20)
+        preview = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, nrows=20)
 
     skiprows = 4
     for idx, row in preview.iterrows():
@@ -286,13 +288,10 @@ def parse_excel_new(uploaded_file):
             skiprows = idx + 1
             break
 
-    # <<< КРИТИЧНО: сброс указателя перед повторным чтением >>>
-    uploaded_file.seek(0)
-
     try:
-        df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, skiprows=skiprows)
+        df = pd.read_excel(io.BytesIO(file_bytes), sheet_name='Лист2', header=None, skiprows=skiprows)
     except Exception:
-        df = pd.read_excel(uploaded_file, sheet_name=0, header=None, skiprows=skiprows)
+        df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, skiprows=skiprows)
 
     df = df.iloc[:, :5].copy()
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
@@ -324,14 +323,17 @@ def parse_excel_new(uploaded_file):
     df['surname'] = df['Доктор'].apply(get_display_name)
     df['doctor_initials'] = df['Доктор'].apply(get_initials)
 
-    def calc_hours(row):
-        if pd.notna(row['start_time']) and pd.notna(row['end_time']):
-            s = row['start_time'].hour * 60 + row['start_time'].minute
-            e = row['end_time'].hour * 60 + row['end_time'].minute
-            return max(0, (e - s) / 60)
-        return 0
+    # Векторизованный расчёт часов (вместо apply(axis=1))
+    def time_to_min(t):
+        return t.hour * 60 + t.minute if pd.notna(t) else None
 
-    df['hours'] = df.apply(calc_hours, axis=1)
+    df['hours'] = 0.0
+    mask = df['start_time'].notna() & df['end_time'].notna()
+    if mask.any():
+        start_min = df.loc[mask, 'start_time'].map(time_to_min)
+        end_min = df.loc[mask, 'end_time'].map(time_to_min)
+        df.loc[mask, 'hours'] = ((end_min - start_min) / 60).clip(lower=0)
+
     return df
 
 
@@ -360,36 +362,33 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
 
     dates_with_data = set(df_f['date_short'].unique()) if not df_f.empty else set()
 
-    def get_cell_info(row):
-        if pd.isna(row['spec']):
-            if row['date_short'] in dates_with_data:
-                return 'Пусто', 'Пусто', 0.0
-            else:
-                return 'Нет данных', 'Нет данных', 0.0
-        return row['spec'], row['doctor_initials'], row['hours']
+    # Векторизованная замена grid.apply(axis=1)
+    mask_na = grid['spec'].isna()
+    mask_empty = mask_na & grid['date_short'].isin(dates_with_data)
+    mask_no_data = mask_na & ~grid['date_short'].isin(dates_with_data)
 
-    grid[['spec', 'doctor_initials', 'hours']] = grid.apply(
-        lambda r: pd.Series(get_cell_info(r)), axis=1
-    )
+    grid.loc[mask_empty, ['spec', 'doctor_initials', 'hours']] = ['Пусто', 'Пусто', 0.0]
+    grid.loc[mask_no_data, ['spec', 'doctor_initials', 'hours']] = ['Нет данных', 'Нет данных', 0.0]
 
     x_list, y_list, c_list, h_list = [], [], [], []
-    for _, row in grid.iterrows():
-        x_list.append(row['date_short'])
-        y_list.append(row['Кабинет'])
-        spec = row['spec']
+    # itertuples вместо iterrows — быстрее, rename=False сохраняет кириллические имена
+    for row in grid.itertuples(index=False, rename=False):
+        x_list.append(row.date_short)
+        y_list.append(row.Кабинет)
+        spec = row.spec
         c_list.append(colors.get(spec, '#999'))
         if spec == 'Нет данных':
-            h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Нет данных")
+            h_list.append(f"<b>Кабинет:</b> {row.Кабинет}<br><b>Дата:</b> {row.date_short}<br>Нет данных")
         elif spec == 'Пусто':
-            h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Пусто")
+            h_list.append(f"<b>Кабинет:</b> {row.Кабинет}<br><b>Дата:</b> {row.date_short}<br>Пусто")
         else:
             h_list.append(
-                f"<b>Кабинет:</b> {row['Кабинет']}<br>"
-                f"<b>Дата:</b> {row['date_short']}<br>"
-                f"<b>Время:</b> {row['Период']}<br>"
+                f"<b>Кабинет:</b> {row.Кабинет}<br>"
+                f"<b>Дата:</b> {row.date_short}<br>"
+                f"<b>Время:</b> {row.Период}<br>"
                 f"<b>Специализация:</b> {spec}<br>"
-                f"<b>Врач(и):</b> {row['doctor_initials']}<br>"
-                f"<b>Часов:</b> {row['hours']:.1f}"
+                f"<b>Врач(и):</b> {row.doctor_initials}<br>"
+                f"<b>Часов:</b> {row.hours:.1f}"
             )
 
     n_rows = len(all_cabs)
@@ -707,8 +706,9 @@ def main():
         st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
         return
 
-    clinic_name = extract_clinic_name(uploaded_file)
-    uploaded_file.seek(0)
+    # Читаем файл один раз
+    file_bytes = uploaded_file.read()
+    clinic_name = extract_clinic_name(file_bytes)
 
     if clinic_name:
         st.markdown(f"# 🏥 График загрузки кабинетов ({clinic_name})")
@@ -726,7 +726,7 @@ def main():
     )
 
     with st.spinner('⏳ Читаем и обрабатываем данные…'):
-        df = parse_excel_new(uploaded_file)
+        df = parse_excel_new(file_bytes)
 
     if df.empty:
         st.error("❌ Не удалось распознать данные. Проверьте формат файла.")
@@ -750,14 +750,9 @@ def main():
             index=0,
         )
 
-        all_dates_full = sorted(
-            df['date_str'].unique(),
-            key=lambda x: datetime.strptime(x, '%d.%m.%Y')
-        )
-        all_dates_short = sorted(
-            df['date_short'].unique(),
-            key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y')
-        )
+        # Убраны повторные strptime — используем уже распарсенные даты
+        all_dates_full = df.sort_values('date_parsed')['date_str'].unique().tolist()
+        all_dates_short = df.sort_values('date_parsed')['date_short'].unique().tolist()
 
         if mode == "📅 Обзор по дням":
             if len(all_dates_full) > 0:
