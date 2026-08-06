@@ -992,7 +992,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     ))
 
     fig.update_layout(
-        title=f'⏰ Загрузка кабинетов (по часам) — {selected_date}',
+        title=f'Загрузка кабинетов по часам',
         xaxis_title='Время',
         yaxis_title='Кабинет',
         height=height,
