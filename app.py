@@ -7,38 +7,87 @@ import re
 st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
-CELL_SIZE = 46          # сторона клетки в пикселях
-MARKER_SIZE = 42        # сторона квадрата (зазор 4px)
+CELL_SIZE = 46
+MARKER_SIZE = 42
 BORDER_WIDTH = 1.5
 BORDER_COLOR = '#444444'
 
 # ==================== НОРМАЛИЗАЦИЯ ====================
 SPEC_MAP = {
+    # ── Терапия и смежные ──
     'терапевт': 'Терапия',
+    'гастроэнтеролог, терапевт': 'Терапия',
+    'отоларинголог, терапевт': 'Терапия',
+    # ── Кардиология ──
     'кардиолог': 'Кардиология',
+    'кардиолог-невролог': 'Кардиология',
+    # ── Эндокринология ──
     'эндокринолог': 'Эндокринология',
+    'акушер-гинеколог, эндокринолог': 'Эндокринология',
+    # ── Неврология ──
     'невролог': 'Неврология',
+    # ── Хирургия ──
     'хирургия': 'Хирургия',
     'хирург': 'Хирургия',
+    'сосудистый хирург': 'Хирургия',
+    'колопроктолог, хирург': 'Хирургия',
+    'травматолог-ортопед, хирург': 'Хирургия',
+    # ── Травматология ──
     'травматолог': 'Травматология',
     'ортопед': 'Травматология',
+    'травматолог-ортопед': 'Травматология',
+    # ── Рентген ──
     'рентгенолог': 'Рентген',
     'рентген': 'Рентген',
+    # ── УЗИ ──
     'ультразвуковой': 'УЗИ',
     'уздг': 'УЗИ',
+    'врач ультразвуковой диагностики': 'УЗИ',
+    'акушер-гинеколог, узд': 'УЗИ',
+    # ── Функц. диагностика ──
     'функциональной диагностики': 'Функц. диагностика',
+    'врач функциональной диагностики': 'Функц. диагностика',
+    # ── Гинекология ──
     'гинеколог': 'Гинекология',
     'акушер': 'Гинекология',
+    'акушер-гинеколог': 'Гинекология',
+    # ── Урология ──
     'уролог': 'Урология',
+    # ── Дерматология ──
     'дерматовенеролог': 'Дерматология',
+    'дерматолог': 'Дерматология',
+    # ── Онкология ──
     'онколог': 'Онкология',
+    'онколог-маммолог': 'Онкология',
+    'маммолог': 'Онкология',
+    # ── Флебология ──
     'флеболог': 'Флебология',
+    # ── Гастроэнтерология ──
     'гастроэнтеролог': 'Гастроэнтерология',
+    # ── ЛОР ──
     'отоларинголог': 'ЛОР',
+    # ── Колопроктология ──
     'колопроктолог': 'Колопроктология',
+    # ── Психология / Психиатрия ──
     'психолог': 'Психология',
+    'психиатр': 'Психиатрия',
+    'психотерапевт': 'Психиатрия',
+    # ── Аллергология и иммунология ──
+    'аллерголог-иммунолог': 'Аллергология-иммунология',
+    'аллерголог': 'Аллергология-иммунология',
+    'иммунолог': 'Аллергология-иммунология',
+    # ── Пульмонология ──
+    'пульмонолог': 'Пульмонология',
+    'пульмонолог-фтизиатр': 'Пульмонология',
+    'фтизиатр': 'Пульмонология',
+    # ── Мануальная терапия ──
+    'мануальный терапевт': 'Мануальная терапия',
+    'мануальная': 'Мануальная терапия',
+    # ── Процедурные / прочие кабинеты ──
     'процедурные кабинеты': 'Процедурные',
     'процедурный': 'Процедурные',
+    'кабинет (кво)': 'Процедурные',
+    # ── Остальное ──
     'лаборатория': 'Лаборатория',
     'статистик': 'Администрация',
     'дневной стационар': 'Стационар',
@@ -46,21 +95,6 @@ SPEC_MAP = {
     'перевязочная': 'Перевязочная',
     'биоматериал': 'Забор биоматериала',
     'квс': 'КВС',
-
-'Акушер-гинеколог (кво)': 'Гинекология',
-'Акушер-гинеколог, УЗД (кво)': 'Гинекология',
-'Акушер-гинеколог, Эндокринолог (кво)': 'Гинекология',
-'Аллерголог-иммунолог (кво)': 'Аллергология',
-'Аллерголог-иммунолог, пульмонолог (кво)': 'Аллергология',
-'Гастроэнтеролог(кво)': 'Гастроэнтерология',
-'Дерматовенеролог (кво)': 'Дерматология',
-'Дерматолог(кво)': 'Дерматология',
-'кво': 'КВС',
-'мануальный терапевт (кво)': 'Мануал',
-'психиатр(кво)': 'Психиатр',
-'психотерапевт (кво)': 'Психотерапевт',
-'пульмонолог': 'Пульмонология'
-
 }
 
 BASE_COLORS = {
@@ -82,6 +116,10 @@ BASE_COLORS = {
     'ЛОР': '#4361EE',
     'Колопроктология': '#7209B7',
     'Психология': '#4CC9F0',
+    'Психиатрия': '#8d99ae',
+    'Аллергология-иммунология': '#264653',
+    'Пульмонология': '#8ac926',
+    'Мануальная терапия': '#ffca3a',
     'Процедурные': '#86BBD8',
     'Лаборатория': '#06D6A0',
     'Администрация': '#95A5A6',
@@ -96,9 +134,9 @@ BASE_COLORS = {
 }
 
 EXTRA_PALETTE = [
-    '#264653', '#2a9d8f', '#e9c46a', '#f4a261', '#e76f51',
-    '#8ac926', '#1982c4', '#ffca3a', '#ff595e', '#8d99ae',
-    '#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#003049',
+    '#2a9d8f', '#e9c46a', '#f4a261', '#e76f51',
+    '#1982c4', '#ff595e', '#d62828', '#f77f00',
+    '#fcbf49', '#eae2b7', '#003049',
 ]
 
 
@@ -141,52 +179,33 @@ def assign_colors(all_specs):
 
 # ==================== НОРМАЛИЗАЦИЯ КАБИНЕТОВ ====================
 def normalize_cabinet(raw):
-    """Приводит любой формат записи кабинета к единому виду."""
     if pd.isna(raw):
         return None
     s = str(raw).strip()
     if not s:
         return None
-
-    # Формат КВО: "о.  2 этаж 2-07" → "2-07"
-    # Ищем паттерн X-YY или X-Y в конце строки
     m = re.search(r'(\d+)[-\.](\d+)$', s)
     if m:
         return f"{m.group(1)}-{m.group(2)}"
-
-    # Пробуем распарсить как обычное число (кабинеты типа "9")
     try:
         return str(int(float(s)))
     except (ValueError, TypeError):
         pass
-
-    # Всё остальное оставляем как есть
     return s
 
 
 def cabinet_sort_key(c):
-    """Ключ сортировки кабинетов.
-    Порядок на оси Y (reversed): снизу вверх от большего к меньшему.
-    """
     s = str(c)
-
-    # Формат КВО: "2-07", "1-18", а также подкабинеты "2-07.1"
     m = re.match(r'^(\d+)-(\d+)(?:\.(\d+))?$', s)
     if m:
         return (0, int(m.group(1)), int(m.group(2)), int(m.group(3)) if m.group(3) else 0)
-
-    # Обычные числа с подчислом: "9.1"
     parts = s.split('.')
     if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
         return (1, int(parts[0]), int(parts[1]), 0)
-
-    # Обычные числа: "9"
     try:
         return (1, int(s), 0, 0)
     except ValueError:
         pass
-
-    # Строки (специальные кабинеты и пр.)
     return (2, s, 0, 0)
 
 
@@ -195,12 +214,8 @@ def clean_clinic_name(name):
     if pd.isna(name):
         return ''
     name = str(name).strip()
-
-    # Удаляем числовые коды в начале/конце (001, 123 и т.д.)
     name = re.sub(r'^\d{2,}\s*[-–—.]?\s*', '', name)
     name = re.sub(r'\s*[-–—.]?\s*\d{2,}$', '', name)
-
-    # Удаляем формы собственности и технические аббревиатуры
     forms = [
         'ООО', 'ОАО', 'ЗАО', 'АО', 'ИП', 'ПАО', 'НАО',
         'ФГБУ', 'ФГАОУ', 'ФГБОУ', 'ФГАУ', 'МБУ', 'ГБУ',
@@ -208,18 +223,13 @@ def clean_clinic_name(name):
     ]
     for form in forms:
         name = re.sub(rf'\b{re.escape(form)}\b', '', name, flags=re.IGNORECASE)
-
-    # Убираем лишние знаки препинания по краям
     name = re.sub(r'^[.,;:\-\s]+', '', name)
     name = re.sub(r'[.,;:\-\s]+$', '', name)
-    # Схлопываем множественные пробелы
     name = re.sub(r'\s+', ' ', name).strip()
-
     return name
 
 
 def extract_clinic_name(uploaded_file):
-    """Извлекает название клиники из первых строк Листа 2."""
     try:
         df_raw = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, nrows=15)
     except Exception:
@@ -227,19 +237,14 @@ def extract_clinic_name(uploaded_file):
             df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None, nrows=15)
         except Exception:
             return ''
-
     candidates = []
     for col in df_raw.columns:
         for val in df_raw[col].dropna():
             s = str(val).strip()
-            # Ищем осмысленный текст достаточной длины
             if len(s) >= 5 and not s.lower().startswith('http') and not s.replace('.', '').replace(',', '').isdigit():
                 candidates.append(s)
-
     if not candidates:
         return ''
-
-    # Самая длинная строка — скорее всего название клиники
     raw_name = max(candidates, key=len)
     return clean_clinic_name(raw_name)
 
@@ -254,7 +259,6 @@ def parse_excel_new(uploaded_file):
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
     df = df.dropna(subset=['Дата', 'Период']).copy()
 
-    # Нормализуем кабинеты и удаляем пустые
     df['Кабинет'] = df['Кабинет'].apply(normalize_cabinet)
     df = df.dropna(subset=['Кабинет'])
     df = df[df['Кабинет'] != ''].copy()
@@ -347,8 +351,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
 
     n_rows = len(all_cabs)
     n_cols = len(all_dates)
-    height = n_rows * CELL_SIZE + 160   # 60 top + 100 bottom
-    width = n_cols * CELL_SIZE + 120    # 80 left + 40 right
+    height = n_rows * CELL_SIZE + 160
+    width = n_cols * CELL_SIZE + 120
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -456,7 +460,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
             return name[0] + '.'
         return ''
 
-    # === 1. Собираем записи по каждой клетке ===
     cell_data = {}
     for _, r in df_day.iterrows():
         for h in hours:
@@ -464,8 +467,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 key = (r['Кабинет'], h)
                 cell_data.setdefault(key, []).append(r)
 
-    # === 2. Определяем, какие кабинеты нужно разделить на весь день ===
-    # Разбиваем ТОЛЬКО если в каком-то часу есть special + 2+ обычных врача
     needs_split = set()
     for (cab, h), entries in cell_data.items():
         special_count = sum(1 for e in entries if is_special(e['surname']))
@@ -473,7 +474,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         if special_count >= 1 and normal_count >= 2:
             needs_split.add(cab)
 
-    # === 3. Формируем клетки ===
     display_cells = []
 
     for (cab, h), entries in cell_data.items():
@@ -498,11 +498,10 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 if matching:
                     display_text = abbreviate(matching[0]['surname'])
                     base_spec = matching[0]['spec']
-                    cell_color = colors.get(base_spec, '#999')  # цвет ВРАЧА, обычный
+                    cell_color = colors.get(base_spec, '#999')
                 else:
                     display_text = abbreviate(s_entry['surname'])
                     base_spec = s_entry['spec']
-                    # Только перевязочная — светлый
                     if 'перевязочная' in s_entry['surname'].lower():
                         cell_color = dull_color(colors.get(base_spec, '#999'), 0.4)
                     else:
@@ -542,7 +541,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 })
 
         else:
-            # === НЕ разбиваем ===
             normal = [e for e in entries if not is_special(e['surname'])]
             special = [e for e in entries if is_special(e['surname'])]
 
@@ -550,12 +548,10 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
             txt = ', '.join(docs)
 
             if normal:
-                # Есть врач — цвет врача, обычный
                 base_spec = normal[0]['spec']
                 cell_color = colors.get(base_spec, '#999')
                 display_text = abbreviate(normal[0]['surname'])
             elif special:
-                # Только special
                 base_spec = special[0]['spec']
                 if 'перевязочная' in special[0]['surname'].lower():
                     cell_color = dull_color(colors.get(base_spec, '#999'), 0.4)
@@ -580,13 +576,11 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 )
             })
 
-    # === 4. Формируем ось Y: убираем разделённые базовые кабинеты ===
     base_cabs = set(str(c) for c in selected_cabinets)
     split_cabs = set(c['y'] for c in display_cells if '.' in str(c['y']))
     final_cabs = (base_cabs - set(str(c) for c in needs_split)) | split_cabs
     all_display_y = sorted(final_cabs, key=cabinet_sort_key)
 
-    # === 5. Пустые клетки ===
     filled = set((c['x'], c['y']) for c in display_cells)
     for cab in all_display_y:
         for h in hours:
@@ -660,225 +654,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     return fig
 
 
-# ==================== СПЕЦИАЛЬНЫЕ КАБИНЕТЫ ====================
-SPECIAL_CABS = [
-    "Кабинет забора мазков",
-    "Кабинет повторных приемов",
-    "Травмпункт Перевязочная Северная",
-    "Кабинет описания ЭКГ .",
-    "Кабинет описания Холтеров и СМАДов",
-    "Кабинет описания спирографии",
-]
-SPECIAL_SPEC_MAP = {
-    "Кабинет забора мазков": "Процедурные",
-    "Кабинет повторных приемов": "Процедурные",
-    "Травмпункт Перевязочная Северная": "Травматология",
-    "Кабинет описания ЭКГ .": "Процедурные",
-    "Кабинет описания Холтеров и СМАДов": "Процедурные",
-    "Кабинет описания спирографии": "Процедурные",
-}
-
-
-def create_special_overview_heatmap(df, selected_dates, colors):
-    df_f = df[df['Кабинет'].isin(SPECIAL_CABS)].copy()
-
-    all_dates = sorted(selected_dates,
-                       key=lambda x: datetime.strptime(x + '.2026', '%d.%m.%Y'))
-
-    if not df_f.empty:
-        agg = df_f.groupby(['date_short', 'Кабинет']).agg({
-            'spec': lambda x: x.mode().iloc[0] if not x.mode().empty else 'Прочее',
-            'surname': lambda x: ', '.join(dict.fromkeys(x)),
-            'hours': 'sum',
-            'Период': lambda x: '; '.join(dict.fromkeys(x)),
-        }).reset_index()
-    else:
-        agg = pd.DataFrame(columns=['date_short', 'Кабинет', 'spec', 'surname', 'hours', 'Период'])
-
-    grid = pd.DataFrame([(d, c) for d in all_dates for c in SPECIAL_CABS],
-                        columns=['date_short', 'Кабинет'])
-    grid = grid.merge(agg, on=['date_short', 'Кабинет'], how='left')
-    grid['Период'] = grid['Период'].fillna('-')
-
-    dates_with_data = set(df_f['date_short'].unique()) if not df_f.empty else set()
-
-    def get_cell_info(row):
-        if pd.isna(row['spec']):
-            if row['date_short'] in dates_with_data:
-                return 'Пусто', 'Пусто', 0.0
-            else:
-                return 'Нет данных', 'Нет данных', 0.0
-        return row['spec'], row['surname'], row['hours']
-
-    grid[['spec', 'surname', 'hours']] = grid.apply(
-        lambda r: pd.Series(get_cell_info(r)), axis=1
-    )
-
-    x_list, y_list, c_list, h_list = [], [], [], []
-    for _, row in grid.iterrows():
-        x_list.append(row['date_short'])
-        y_list.append(row['Кабинет'])
-        spec = row['spec']
-        c_list.append(colors.get(spec, '#999'))
-        if spec == 'Нет данных':
-            h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Нет данных")
-        elif spec == 'Пусто':
-            h_list.append(f"<b>Кабинет:</b> {row['Кабинет']}<br><b>Дата:</b> {row['date_short']}<br>Пусто")
-        else:
-            h_list.append(
-                f"<b>Кабинет:</b> {row['Кабинет']}<br>"
-                f"<b>Дата:</b> {row['date_short']}<br>"
-                f"<b>Время:</b> {row['Период']}<br>"
-                f"<b>Специализация:</b> {spec}<br>"
-                f"<b>Врач(и):</b> {row['surname']}<br>"
-                f"<b>Часов:</b> {row['hours']:.1f}"
-            )
-
-    n_rows = len(SPECIAL_CABS)
-    n_cols = len(all_dates)
-    height = n_rows * CELL_SIZE + 160
-    width = n_cols * CELL_SIZE + 320   # больше левый отступ
-
-    fig = go.Figure(data=go.Scatter(
-        x=x_list,
-        y=y_list,
-        mode='markers',
-        marker=dict(
-            symbol='square',
-            size=MARKER_SIZE,
-            color=c_list,
-            line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
-        ),
-        hovertext=h_list,
-        hoverinfo='text',
-        showlegend=False,
-    ))
-
-    fig.update_layout(
-        title='🏥 Специальные кабинеты — обзор',
-        xaxis_title='Дата',
-        yaxis_title='Кабинет',
-        height=height,
-        width=width,
-        yaxis=dict(
-            type='category',
-            categoryorder='array',
-            categoryarray=SPECIAL_CABS,
-            dtick=1,
-            showgrid=False,
-        ),
-        xaxis=dict(
-            categoryorder='array',
-            categoryarray=all_dates,
-            dtick=1,
-            showgrid=False,
-            type='category',
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font=dict(size=12),
-        margin=dict(l=280, r=40, t=60, b=100),
-        showlegend=False,
-    )
-    return fig
-
-
-def create_special_hourly_heatmap(df, selected_date, colors):
-    df_day = df[(df['date_str'] == selected_date) &
-                df['Кабинет'].isin(SPECIAL_CABS)].copy()
-
-    hours = [f"{h:02d}:{m:02d}" for h in range(7, 24) for m in (0, 30)]
-
-    def time_to_min(t):
-        if t is None:
-            return None
-        return t.hour * 60 + t.minute
-
-    def is_working(row, time_str):
-        if pd.isna(row['start_time']) or pd.isna(row['end_time']):
-            return False
-        h, m = map(int, time_str.split(':'))
-        minutes = h * 60 + m
-        start = time_to_min(row['start_time'])
-        end = time_to_min(row['end_time'])
-        return start <= minutes < end
-
-    x_list, y_list, c_list, h_list = [], [], [], []
-    for cab in SPECIAL_CABS:
-        cab_df = df_day[df_day['Кабинет'] == cab]
-        for hr in hours:
-            docs = []
-            specs = []
-            for _, r in cab_df.iterrows():
-                if is_working(r, hr):
-                    docs.append(r['surname'])
-                    specs.append(r['spec'])
-            x_list.append(hr)
-            y_list.append(cab)
-            if docs:
-                unique_docs = list(dict.fromkeys(docs))
-                txt = ', '.join(unique_docs)
-                spec_val = specs[0] if specs else SPECIAL_SPEC_MAP[cab]
-                c_list.append(colors.get(spec_val, '#999'))
-                h_list.append(
-                    f"<b>Кабинет:</b> {cab}<br>"
-                    f"<b>Время:</b> {hr}<br>"
-                    f"<b>Специализация:</b> {spec_val}<br>"
-                    f"<b>Врач:</b> {txt}"
-                )
-            else:
-                c_list.append(colors.get('Пусто', '#999'))
-                h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Время:</b> {hr}<br>Пусто")
-
-    n_rows = len(SPECIAL_CABS)
-    n_cols = len(hours)
-    height = n_rows * CELL_SIZE + 160
-    width = n_cols * CELL_SIZE + 320
-
-    fig = go.Figure(data=go.Scatter(
-        x=x_list,
-        y=y_list,
-        mode='markers',
-        marker=dict(
-            symbol='square',
-            size=MARKER_SIZE,
-            color=c_list,
-            line=dict(width=BORDER_WIDTH, color=BORDER_COLOR),
-        ),
-        hovertext=h_list,
-        hoverinfo='text',
-        showlegend=False,
-    ))
-
-    fig.update_layout(
-        title=f'🏥 Специальные кабинеты — {selected_date}',
-        xaxis_title='Время',
-        yaxis_title='Кабинет',
-        height=height,
-        width=width,
-        yaxis=dict(
-            type='category',
-            categoryorder='array',
-            categoryarray=SPECIAL_CABS,
-            dtick=1,
-            showgrid=False,
-        ),
-        xaxis=dict(
-            categoryorder='array',
-            categoryarray=hours,
-            dtick=1,
-            showgrid=False,
-            tickangle=45,
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font=dict(size=12),
-        margin=dict(l=280, r=40, t=60, b=100),
-        showlegend=False,
-    )
-    return fig
-
-
 # ==================== ПРИЛОЖЕНИЕ ====================
 def main():
     uploaded_file = st.file_uploader(
@@ -889,9 +664,8 @@ def main():
         st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
         return
 
-    # --- Извлекаем название клиники из файла ---
     clinic_name = extract_clinic_name(uploaded_file)
-    uploaded_file.seek(0)  # сброс указателя для повторного чтения
+    uploaded_file.seek(0)
 
     if clinic_name:
         st.markdown(f"# 🏥 График загрузки кабинетов ({clinic_name})")
@@ -915,7 +689,6 @@ def main():
         st.error("❌ Не удалось распознать данные. Проверьте формат файла.")
         return
 
-    # --- УНИКАЛЬНЫЕ КАБИНЕТЫ ИЗ ФАЙЛА (без хардкода) ---
     selected_cabinets = sorted(df['Кабинет'].unique(), key=cabinet_sort_key)
 
     all_specs = sorted(df['spec'].unique())
@@ -933,11 +706,6 @@ def main():
             ["⏰ Детально по часам", "📅 Обзор по дням"],
             index=0,
         )
-
-        # Информация о найденных кабинетах
-        st.markdown("**🚪 Найденные кабинеты:**")
-        for cab in selected_cabinets:
-            st.markdown(f"- `{cab}`")
 
         all_dates_full = sorted(
             df['date_str'].unique(),
@@ -1005,7 +773,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # ===== ОСНОВНАЯ ОБЛАСТЬ =====
     if mode == "📅 Обзор по дням":
         st.subheader(f"📅 Обзор с {date_range_label} ({len(selected_dates)} дн.)")
         fig = create_overview_heatmap(df, selected_cabinets, selected_dates, colors)
@@ -1019,12 +786,6 @@ def main():
             show = show.sort_values(['date_str', 'Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
-        # --- СПЕЦКАБИНЕТЫ: обзор по дням ---
-        st.divider()
-        st.subheader("🏥 Специальные кабинеты")
-        fig_special = create_special_overview_heatmap(df, selected_dates, colors)
-        st.plotly_chart(fig_special, use_container_width=False)
-
     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
         fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors)
@@ -1036,12 +797,6 @@ def main():
                 ['Кабинет', 'Доктор', 'spec', 'Период', 'hours']
             ].sort_values(['Кабинет', 'Период'])
             st.dataframe(show, use_container_width=True, hide_index=True)
-
-        # --- СПЕЦКАБИНЕТЫ: почасовая ---
-        st.divider()
-        st.subheader("🏥 Специальные кабинеты")
-        fig_special = create_special_hourly_heatmap(df, selected_date, colors)
-        st.plotly_chart(fig_special, use_container_width=False)
 
 
 if __name__ == "__main__":
