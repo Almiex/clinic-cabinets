@@ -1,3 +1,308 @@
+# import streamlit as st
+# import pandas as pd
+# import plotly.graph_objects as go
+# from datetime import datetime, time, timedelta
+# import re
+
+# st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
+
+# # ==================== ЕДИНЫЙ СТИЛЬ ====================
+# CELL_SIZE = 46
+# MARKER_SIZE = 42
+# BORDER_WIDTH = 1.5
+# BORDER_COLOR = '#444444'
+
+# # ==================== НОРМАЛИЗАЦИЯ ====================
+# SPEC_MAP = {
+#     # ── Терапия и смежные ──
+#     'терапевт': 'Терапия',
+#     'гастроэнтеролог, терапевт': 'Терапия',
+#     'отоларинголог, терапевт': 'Терапия',
+#     # ── Кардиология ──
+#     'кардиолог': 'Кардиология',
+#     'кардиолог-невролог': 'Кардиология',
+#     # ── Эндокринология ──
+#     'эндокринолог': 'Эндокринология',
+#     'акушер-гинеколог, эндокринолог': 'Эндокринология',
+#     # ── Неврология ──
+#     'невролог': 'Неврология',
+#     # ── Хирургия ──
+#     'хирургия': 'Хирургия',
+#     'хирург': 'Хирургия',
+#     'сосудистый хирург': 'Хирургия',
+#     'колопроктолог, хирург': 'Хирургия',
+#     'травматолог-ортопед, хирург': 'Хирургия',
+#     # ── Травматология ──
+#     'травматолог': 'Травматология',
+#     'ортопед': 'Травматология',
+#     'травматолог-ортопед': 'Травматология',
+#     # ── Рентген ──
+#     'рентгенолог': 'Рентген',
+#     'рентген': 'Рентген',
+#     # ── УЗИ ──
+#     'ультразвуковой': 'УЗИ',
+#     'уздг': 'УЗИ',
+#     'врач ультразвуковой диагностики': 'УЗИ',
+#     'акушер-гинеколог, узд': 'УЗИ',
+#     # ── Функц. диагностика ──
+#     'функциональной диагностики': 'Функц. диагностика',
+#     'врач функциональной диагностики': 'Функц. диагностика',
+#     # ── Гинекология ──
+#     'гинеколог': 'Гинекология',
+#     'акушер': 'Гинекология',
+#     'акушер-гинеколог': 'Гинекология',
+#     # ── Урология ──
+#     'уролог': 'Урология',
+#     # ── Дерматология ──
+#     'дерматовенеролог': 'Дерматология',
+#     'дерматолог': 'Дерматология',
+#     # ── Онкология ──
+#     'онколог': 'Онкология',
+#     'онколог-маммолог': 'Онкология',
+#     'маммолог': 'Онкология',
+#     # ── Флебология ──
+#     'флеболог': 'Флебология',
+#     # ── Гастроэнтерология ──
+#     'гастроэнтеролог': 'Гастроэнтерология',
+#     # ── ЛОР ──
+#     'отоларинголог': 'ЛОР',
+#     # ── Колопроктология ──
+#     'колопроктолог': 'Колопроктология',
+#     # ── Психология / Психиатрия ──
+#     'психолог': 'Психология',
+#     'психиатр': 'Психиатрия',
+#     'психотерапевт': 'Психиатрия',
+#     # ── Аллергология и иммунология ──
+#     'аллерголог-иммунолог': 'Аллергология-иммунология',
+#     'аллерголог': 'Аллергология-иммунология',
+#     'иммунолог': 'Аллергология-иммунология',
+#     # ── Пульмонология ──
+#     'пульмонолог': 'Пульмонология',
+#     'пульмонолог-фтизиатр': 'Пульмонология',
+#     'фтизиатр': 'Пульмонология',
+#     # ── Мануальная терапия ──
+#     'мануальный терапевт': 'Мануальная терапия',
+#     'мануальная': 'Мануальная терапия',
+#     # ── Процедурные / прочие кабинеты ──
+#     'процедурные кабинеты': 'Процедурные',
+#     'процедурный': 'Процедурные',
+#     'кабинет (кво)': 'Процедурные',
+#     # ── Остальное ──
+#     'лаборатория': 'Лаборатория',
+#     'статистик': 'Администрация',
+#     'дневной стационар': 'Стационар',
+#     'физиотерапии': 'Физиотерапия',
+#     'перевязочная': 'Перевязочная',
+#     'биоматериал': 'Забор биоматериала',
+#     'квс': 'КВС',
+# }
+
+# BASE_COLORS = {
+#     'Терапия': '#2E86AB',
+#     'Кардиология': '#A23B72',
+#     'Эндокринология': '#F18F01',
+#     'Неврология': '#C73E1D',
+#     'Хирургия': '#E94F37',
+#     'Травматология': '#F6AE2D',
+#     'Рентген': '#6A4C93',
+#     'УЗИ': '#9B5DE5',
+#     'Функц. диагностика': '#00BBF9',
+#     'Гинекология': '#F15BB5',
+#     'Урология': '#3A86FF',
+#     'Дерматология': '#8338EC',
+#     'Онкология': '#FB5607',
+#     'Флебология': '#FF006E',
+#     'Гастроэнтерология': '#3A0CA3',
+#     'ЛОР': '#4361EE',
+#     'Колопроктология': '#7209B7',
+#     'Психология': '#4CC9F0',
+#     'Психиатрия': '#8d99ae',
+#     'Аллергология-иммунология': '#264653',
+#     'Пульмонология': '#8ac926',
+#     'Мануальная терапия': '#ffca3a',
+#     'Процедурные': '#86BBD8',
+#     'Лаборатория': '#06D6A0',
+#     'Администрация': '#95A5A6',
+#     'Стационар': '#118AB2',
+#     'Физиотерапия': '#2A9D8F',
+#     'Перевязочная': '#E9C46A',
+#     'Забор биоматериала': '#F4A261',
+#     'КВС': '#E76F51',
+#     'Прочее': '#BDC3C7',
+#     'Пусто': '#E8E8E8',
+#     'Нет данных': '#F5F5F5',
+# }
+
+# EXTRA_PALETTE = [
+#     '#2a9d8f', '#e9c46a', '#f4a261', '#e76f51',
+#     '#1982c4', '#ff595e', '#d62828', '#f77f00',
+#     '#fcbf49', '#eae2b7', '#003049',
+# ]
+
+
+# def normalize_spec(raw):
+#     if pd.isna(raw):
+#         return 'Прочее'
+#     s = str(raw).strip().lower()
+#     for key, val in SPEC_MAP.items():
+#         if key in s:
+#             return val
+#     return 'Прочее'
+
+
+# def get_display_name(full_name):
+#     if pd.isna(full_name):
+#         return ''
+#     s = str(full_name).strip()
+#     s_lower = s.lower()
+#     cabinet_keywords = [
+#         'кабинет', 'перевязочная', 'биоматериал', 'процедурн',
+#         'физиотерап', 'лаборатор', 'статистик', 'стационар', 'квс'
+#     ]
+#     if any(kw in s_lower for kw in cabinet_keywords):
+#         return s
+#     parts = s.split()
+#     return parts[0] if parts else s
+
+
+# def assign_colors(all_specs):
+#     colors = {}
+#     extra_idx = 0
+#     for spec in sorted(all_specs):
+#         if spec in BASE_COLORS:
+#             colors[spec] = BASE_COLORS[spec]
+#         else:
+#             colors[spec] = EXTRA_PALETTE[extra_idx % len(EXTRA_PALETTE)]
+#             extra_idx += 1
+#     return colors
+
+
+# # ==================== НОРМАЛИЗАЦИЯ КАБИНЕТОВ ====================
+# def normalize_cabinet(raw):
+#     """Приводит кабинеты к единому виду.
+#     Обычные: 9 → '9'
+#     КВО: 'о. 2 этаж 2-07' → '207', '1-08' → '108'
+#     """
+#     if pd.isna(raw):
+#         return None
+#     s = str(raw).strip()
+#     if not s:
+#         return None
+
+#     # Защита от float-значений pandas (9.0, 10.0)
+#     if re.match(r'^\d+\.0$', s):
+#         return str(int(float(s)))
+
+#     # КВО-формат: ищем паттерн этаж-кабинет в конце строки
+#     # Примеры: "о. 2 этаж 2-07", "1-08", "2.07"
+#     m = re.search(r'(\d+)[-\.](\d+)$', s)
+#     if m:
+#         left, right = m.group(1), m.group(2)
+#         # Убеждаемся, что это именно КВО (1-2 цифры этажа + 2 цифры кабинета)
+#         if len(right) == 2 and len(left) <= 2:
+#             return f"{left}{right}"
+
+#     # Чистое число (обычный кабинет)
+#     try:
+#         val = float(s)
+#         if val == int(val):
+#             return str(int(val))
+#         return str(val)
+#     except ValueError:
+#         pass
+
+#     return s
+
+
+# def cabinet_sort_key(c):
+#     """Сортировка: снизу вверх от большего к меньшему.
+#     КВО (>=100): 207 внизу, 101 вверху
+#     Обычные (<100): 25 внизу, 1 вверху
+#     """
+#     s = str(c)
+
+#     # Подкабинеты с точкой: 108.1, 9.1
+#     parts = s.split('.')
+#     if len(parts) == 2:
+#         left, right = parts[0], parts[1]
+#         if left.isdigit() and right.isdigit():
+#             left_int = int(left)
+#             if left_int >= 100:
+#                 return (0, left_int, int(right))   # КВО подкабинет
+#             else:
+#                 return (1, left_int, int(right))   # Обычный подкабинет
+
+#     # Без точки
+#     if s.isdigit():
+#         num = int(s)
+#         if num >= 100:
+#             return (0, num, 0)   # КВО
+#         else:
+#             return (1, num, 0)   # Обычный
+
+#     # Строки (спец. кабинеты)
+#     return (2, s, 0)
+
+
+# # ==================== ИЗВЛЕЧЕНИЕ НАЗВАНИЯ КЛИНИКИ ====================
+# def clean_clinic_name(name):
+#     if pd.isna(name):
+#         return ''
+#     name = str(name).strip()
+#     name = re.sub(r'^\d{2,}\s*[-–—.]?\s*', '', name)
+#     name = re.sub(r'\s*[-–—.]?\s*\d{2,}$', '', name)
+#     forms = [
+#         'ООО', 'ОАО', 'ЗАО', 'АО', 'ИП', 'ПАО', 'НАО',
+#         'ФГБУ', 'ФГАОУ', 'ФГБОУ', 'ФГАУ', 'МБУ', 'ГБУ',
+#         'ГБУЗ', 'МБУЗ', 'ФМБА', 'МИНЗДРАВ'
+#     ]
+#     for form in forms:
+#         name = re.sub(rf'\b{re.escape(form)}\b', '', name, flags=re.IGNORECASE)
+#     name = re.sub(r'^[.,;:\-\s]+', '', name)
+#     name = re.sub(r'[.,;:\-\s]+$', '', name)
+#     name = re.sub(r'\s+', ' ', name).strip()
+#     return name
+
+
+# def extract_clinic_name(uploaded_file):
+#     try:
+#         df_raw = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, nrows=15)
+#     except Exception:
+#         try:
+#             df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None, nrows=15)
+#         except Exception:
+#             return ''
+#     candidates = []
+#     for col in df_raw.columns:
+#         for val in df_raw[col].dropna():
+#             s = str(val).strip()
+#             if len(s) >= 5 and not s.lower().startswith('http') and not s.replace('.', '').replace(',', '').isdigit():
+#                 candidates.append(s)
+#     if not candidates:
+#         return ''
+#     raw_name = max(candidates, key=len)
+#     return clean_clinic_name(raw_name)
+
+
+# # ==================== ПАРСИНГ ====================
+# def parse_excel_new(uploaded_file):
+#     try:
+#         df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=6)
+#     except Exception:
+#         df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
+    
+#     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
+#     df = df.dropna(subset=['Дата', 'Период']).copy()
+
+#     df['Кабинет'] = df['Кабинет'].apply(normalize_cabinet)
+#     df = df.dropna(subset=['Кабинет'])
+#     df = df[df['Кабинет'] != ''].copy()
+
+#     df['date_parsed'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y', errors='coerce')
+#     df = df.dropna(subset=['date_parsed'])
+#     df['date_str'] = df['date_parsed'].dt.strftime('%d.%m.%Y')
+#     df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -286,22 +591,49 @@ def extract_clinic_name(uploaded_file):
 
 # ==================== ПАРСИНГ ====================
 def parse_excel_new(uploaded_file):
+    """Читает Excel, автоматически находя начало данных."""
+    # Сначала определяем структуру файла
     try:
-        df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=6)
+        preview = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, nrows=20)
     except Exception:
-        df = pd.read_excel(uploaded_file, sheet_name=0, header=6)
-    
+        preview = pd.read_excel(uploaded_file, sheet_name=0, header=None, nrows=20)
+
+    # Ищем строку с заголовками ("Кабинет", "Дата"...) и пропускаем её
+    skiprows = 4  # fallback по умолчанию
+    for idx, row in preview.iterrows():
+        row_str = ' '.join(str(v).lower() if pd.notna(v) else '' for v in row)
+        if 'кабинет' in row_str and ('дата' in row_str or 'период' in row_str or 'доктор' in row_str):
+            skiprows = idx + 1
+            break
+
+    # Читаем данные, пропуская служебные строки
+    try:
+        df = pd.read_excel(uploaded_file, sheet_name='Лист2', header=None, skiprows=skiprows)
+    except Exception:
+        df = pd.read_excel(uploaded_file, sheet_name=0, header=None, skiprows=skiprows)
+
+    # Убеждаемся, что у нас достаточно колонок
+    df = df.iloc[:, :5].copy()
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
+
+    # Удаляем строки без даты или периода
     df = df.dropna(subset=['Дата', 'Период']).copy()
 
+    # Нормализуем кабинеты и удаляем пустые
     df['Кабинет'] = df['Кабинет'].apply(normalize_cabinet)
     df = df.dropna(subset=['Кабинет'])
     df = df[df['Кабинет'] != ''].copy()
 
+    # Парсим дату
     df['date_parsed'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y', errors='coerce')
+    # Если формат не сработал (дата уже в виде datetime), пробуем без формата
+    if df['date_parsed'].isna().all():
+        df['date_parsed'] = pd.to_datetime(df['Дата'], errors='coerce')
     df = df.dropna(subset=['date_parsed'])
     df['date_str'] = df['date_parsed'].dt.strftime('%d.%m.%Y')
     df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
+
+    # Парсим время
 
     def parse_period(p):
         m = re.match(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})', str(p))
