@@ -816,12 +816,33 @@ def main():
         fig = create_overview_heatmap(df, selected_cabinets, selected_dates, colors)
         st.plotly_chart(fig, use_container_width=False)
 
+    #     with st.expander("📊 Таблица данных"):
+    #         show = df[
+    #             df['Кабинет'].isin(selected_cabinets) &
+    #             df['date_short'].isin([d for d in selected_dates if d in df['date_short'].values])
+    #         ][['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']]
+    #         show = show.sort_values(['date_str', 'Кабинет', 'Период'])
+    #         st.dataframe(show, use_container_width=True, hide_index=True)
+
+    # else:
+    #     st.subheader(f"⏰ Почасовая карта — {selected_date}")
+    #     fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors)
+    #     st.plotly_chart(fig, use_container_width=False)
+
+    #     with st.expander("📊 Таблица данных за день"):
+    #         df_day = df[df['date_str'] == selected_date]
+    #         show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
+    #             ['Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']
+    #         ].sort_values(['Кабинет', 'Период'])
+    #         st.dataframe(show, use_container_width=True, hide_index=True)
+
         with st.expander("📊 Таблица данных"):
             show = df[
                 df['Кабинет'].isin(selected_cabinets) &
                 df['date_short'].isin([d for d in selected_dates if d in df['date_short'].values])
             ][['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']]
-            show = show.sort_values(['date_str', 'Кабинет', 'Период'])
+            show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
+            show = show.sort_values(['date_str', '_sort_key', 'Период']).drop(columns=['_sort_key'])
             st.dataframe(show, use_container_width=True, hide_index=True)
 
     else:
@@ -833,9 +854,10 @@ def main():
             df_day = df[df['date_str'] == selected_date]
             show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
                 ['Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']
-            ].sort_values(['Кабинет', 'Период'])
+            ]
+            show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
+            show = show.sort_values(['_sort_key', 'Период']).drop(columns=['_sort_key'])
             st.dataframe(show, use_container_width=True, hide_index=True)
-
 
 if __name__ == "__main__":
     main()
