@@ -179,34 +179,69 @@ def assign_colors(all_specs):
 
 # ==================== НОРМАЛИЗАЦИЯ КАБИНЕТОВ ====================
 def normalize_cabinet(raw):
+    """Приводит кабинеты к единому виду.
+    Обычные: 9 → '9'
+    КВО: 'о. 2 этаж 2-07' → '207', '1-08' → '108'
+    """
     if pd.isna(raw):
         return None
     s = str(raw).strip()
     if not s:
         return None
+
+    # Защита от float-значений pandas (9.0, 10.0)
+    if re.match(r'^\d+\.0$', s):
+        return str(int(float(s)))
+
+    # КВО-формат: ищем паттерн этаж-кабинет в конце строки
+    # Примеры: "о. 2 этаж 2-07", "1-08", "2.07"
     m = re.search(r'(\d+)[-\.](\d+)$', s)
     if m:
-        return f"{m.group(1)}-{m.group(2)}"
+        left, right = m.group(1), m.group(2)
+        # Убеждаемся, что это именно КВО (1-2 цифры этажа + 2 цифры кабинета)
+        if len(right) == 2 and len(left) <= 2:
+            return f"{left}{right}"
+
+    # Чистое число (обычный кабинет)
     try:
-        return str(int(float(s)))
-    except (ValueError, TypeError):
+        val = float(s)
+        if val == int(val):
+            return str(int(val))
+        return str(val)
+    except ValueError:
         pass
+
     return s
 
 
 def cabinet_sort_key(c):
+    """Сортировка: снизу вверх от большего к меньшему.
+    КВО (>=100): 207 внизу, 101 вверху
+    Обычные (<100): 25 внизу, 1 вверху
+    """
     s = str(c)
-    m = re.match(r'^(\d+)-(\d+)(?:\.(\d+))?$', s)
-    if m:
-        return (0, int(m.group(1)), int(m.group(2)), int(m.group(3)) if m.group(3) else 0)
+
+    # Подкабинеты с точкой: 108.1, 9.1
     parts = s.split('.')
-    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-        return (1, int(parts[0]), int(parts[1]), 0)
-    try:
-        return (1, int(s), 0, 0)
-    except ValueError:
-        pass
-    return (2, s, 0, 0)
+    if len(parts) == 2:
+        left, right = parts[0], parts[1]
+        if left.isdigit() and right.isdigit():
+            left_int = int(left)
+            if left_int >= 100:
+                return (0, left_int, int(right))   # КВО подкабинет
+            else:
+                return (1, left_int, int(right))   # Обычный подкабинет
+
+    # Без точки
+    if s.isdigit():
+        num = int(s)
+        if num >= 100:
+            return (0, num, 0)   # КВО
+        else:
+            return (1, num, 0)   # Обычный
+
+    # Строки (спец. кабинеты)
+    return (2, s, 0)
 
 
 # ==================== ИЗВЛЕЧЕНИЕ НАЗВАНИЯ КЛИНИКИ ====================
