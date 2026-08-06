@@ -796,7 +796,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         b = int(b + (255 - b) * factor)
         return f'#{r:02x}{g:02x}{b:02x}'
 
-    VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯ'
+    VOWELS = 'аеёиоуыэюяАЕЁИОУЫЭЮЯьъ'
     SPECIAL_KEYWORDS = ['кабинет', 'стационар', 'хирургия', 'операционная', 'рентген', 'перевязочная']
 
     def is_special(name):
@@ -992,7 +992,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     ))
 
     fig.update_layout(
-        title=f'⏰ Почасовая карта — {selected_date}',
+        title=f'⏰ Загрузка кабинетов (по часам) — {selected_date}',
         xaxis_title='Время',
         yaxis_title='Кабинет',
         height=height,
@@ -1154,7 +1154,7 @@ def main():
             st.dataframe(show, use_container_width=True, hide_index=True)
 
     else:
-        st.subheader(f"⏰ Почасовая карта — {selected_date}")
+        st.subheader(f"⏰ Почасовой график — {selected_date}")
         fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors)
         st.plotly_chart(fig, use_container_width=False)
 
