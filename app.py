@@ -162,7 +162,6 @@ def get_initials(full_name):
     parts = s.split()
     if len(parts) >= 3:
         fam, name, otch = parts[0], parts[1], parts[2]
-        # Убираем лишние точки если они уже есть
         name = name.replace('.', '')
         otch = otch.replace('.', '')
         return f"{fam} {name[0]}. {otch[0]}."
@@ -371,24 +370,26 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     grid.loc[mask_no_data, ['spec', 'doctor_initials', 'hours']] = ['Нет данных', 'Нет данных', 0.0]
 
     x_list, y_list, c_list, h_list = [], [], [], []
-    # itertuples вместо iterrows — быстрее, rename=False сохраняет кириллические имена
-    for row in grid.itertuples(index=False, rename=False):
-        x_list.append(row.date_short)
-        y_list.append(row.Кабинет)
-        spec = row.spec
+    # zip вместо itertuples — безопасно для кириллических имён колонок
+    for date_short, cab, spec, period, doctor_initials, hours in zip(
+        grid['date_short'], grid['Кабинет'], grid['spec'],
+        grid['Период'], grid['doctor_initials'], grid['hours']
+    ):
+        x_list.append(date_short)
+        y_list.append(cab)
         c_list.append(colors.get(spec, '#999'))
         if spec == 'Нет данных':
-            h_list.append(f"<b>Кабинет:</b> {row.Кабинет}<br><b>Дата:</b> {row.date_short}<br>Нет данных")
+            h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {date_short}<br>Нет данных")
         elif spec == 'Пусто':
-            h_list.append(f"<b>Кабинет:</b> {row.Кабинет}<br><b>Дата:</b> {row.date_short}<br>Пусто")
+            h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {date_short}<br>Пусто")
         else:
             h_list.append(
-                f"<b>Кабинет:</b> {row.Кабинет}<br>"
-                f"<b>Дата:</b> {row.date_short}<br>"
-                f"<b>Время:</b> {row.Период}<br>"
+                f"<b>Кабинет:</b> {cab}<br>"
+                f"<b>Дата:</b> {date_short}<br>"
+                f"<b>Время:</b> {period}<br>"
                 f"<b>Специализация:</b> {spec}<br>"
-                f"<b>Врач(и):</b> {row.doctor_initials}<br>"
-                f"<b>Часов:</b> {row.hours:.1f}"
+                f"<b>Врач(и):</b> {doctor_initials}<br>"
+                f"<b>Часов:</b> {hours:.1f}"
             )
 
     n_rows = len(all_cabs)
@@ -849,6 +850,7 @@ def main():
             show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
             show = show.sort_values(['_sort_key', 'Период']).drop(columns=['_sort_key'])
             st.dataframe(show, use_container_width=True, hide_index=True)
+
 
 if __name__ == "__main__":
     main()
