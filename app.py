@@ -292,6 +292,10 @@ def parse_excel_new(file_bytes):
     except Exception:
         df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, skiprows=skiprows)
 
+    # Защита: если столбцов меньше 5 — файл некорректный
+    if df.shape[1] < 5:
+        return pd.DataFrame()
+
     df = df.iloc[:, :5].copy()
     df.columns = ['Кабинет', 'Дата', 'Период', 'Доктор', 'Специализация']
 
@@ -309,7 +313,8 @@ def parse_excel_new(file_bytes):
     df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
 
     def parse_period(p):
-        m = re.match(r'(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})', str(p))
+        # Поддержка пробелов вокруг дефиса: "09:00 - 18:00"
+        m = re.match(r'(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})', str(p))
         if m:
             h1, m1, h2, m2 = map(int, m.groups())
             return time(h1, m1), time(h2, m2)
@@ -394,8 +399,15 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
 
     n_rows = len(all_cabs)
     n_cols = len(all_dates)
-    height = n_rows * CELL_SIZE + 160
-    width = n_cols * CELL_SIZE + 120
+
+    # Защита от нулевой ширины
+    if n_rows == 0 or n_cols == 0:
+        fig = go.Figure()
+        fig.update_layout(title="Нет данных для отображения")
+        return fig
+
+    height = max(n_rows * CELL_SIZE + 160, 200)
+    width = max(n_cols * CELL_SIZE + 120, 400)
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -646,8 +658,15 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
     n_rows = len(all_display_y)
     n_cols = len(hours)
-    height = n_rows * CELL_SIZE + 160
-    width = n_cols * CELL_SIZE + 120
+
+    # Защита от нулевой ширины
+    if n_rows == 0 or n_cols == 0:
+        fig = go.Figure()
+        fig.update_layout(title="Нет данных для отображения")
+        return fig
+
+    height = max(n_rows * CELL_SIZE + 160, 200)
+    width = max(n_cols * CELL_SIZE + 120, 400)
 
     fig = go.Figure(data=go.Scatter(
         x=x_list,
@@ -757,11 +776,11 @@ def main():
 
         if mode == "📅 Обзор по дням":
             if len(all_dates_full) > 0:
-                min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y')
-                max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y')
+                min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y').date()
+                max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y').date()
             else:
-                min_date = datetime.now()
-                max_date = datetime.now()
+                min_date = datetime.now().date()
+                max_date = datetime.now().date()
 
             date_range = st.date_input(
                 "Выберите диапазон:",
@@ -813,24 +832,28 @@ def main():
         )
 
     if mode == "📅 Обзор по дням":
-        st.subheader(f"📅 Обзор с {date_range_label} ({len(selected_dates)} дн.)")
-        fig = create_overview_heatmap(df, selected_cabinets, selected_dates, colors)
-        st.plotly_chart(fig, use_container_width=False)
+        # Защита: если диапазон пуст — не пытаемся рисовать
+        if not selected_dates:
+            st.info("📭 В выбранном диапазоне нет дат для отображения.")
+        else:
+            st.subheader(f"📅 Обзор с {date_range_label} ({len(selected_dates)} дн.)")
+            fig = create_overview_heatmap(df, selected_cabinets, selected_dates, colors)
+            st.plotly_chart(fig, use_container_width=False)
 
-        with st.expander("📊 Таблица данных"):
-            show = df[
-                df['Кабинет'].isin(selected_cabinets) &
-                df['date_short'].isin([d for d in selected_dates if d in df['date_short'].values])
-            ][['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']]
-            show = show.rename(columns={
-                'date_str': 'Дата',
-                'doctor_initials': 'Врач',
-                'spec': 'Специализация',
-                'hours': 'Часы',
-            })
-            show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
-            show = show.sort_values(['Дата', '_sort_key', 'Период']).drop(columns=['_sort_key'])
-            st.dataframe(show, use_container_width=True, hide_index=True)
+            with st.expander("📊 Таблица данных"):
+                show = df[
+                    df['Кабинет'].isin(selected_cabinets) &
+                    df['date_short'].isin([d for d in selected_dates if d in df['date_short'].values])
+                ][['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']]
+                show = show.rename(columns={
+                    'date_str': 'Дата',
+                    'doctor_initials': 'Врач',
+                    'spec': 'Специализация',
+                    'hours': 'Часы',
+                })
+                show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
+                show = show.sort_values(['Дата', '_sort_key', 'Период']).drop(columns=['_sort_key'])
+                st.dataframe(show, use_container_width=True, hide_index=True)
 
     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
