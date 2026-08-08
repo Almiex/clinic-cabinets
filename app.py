@@ -946,7 +946,7 @@ def main():
         all_dates_full = df.sort_values('date_parsed')['date_str'].unique().tolist()
         all_dates_short = df.sort_values('date_parsed')['date_short'].unique().tolist()
 
-        if mode == "📅 Обзор по дням":
+        if mode == "📅 Обзор по периодам":
             if len(all_dates_full) > 0:
                 min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y').date()
                 max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y').date()
@@ -1031,7 +1031,7 @@ def main():
             unsafe_allow_html=True,
         )
 
-    if mode == "📅 Обзор по дням":
+    if mode == "📅 Обзор по периодам":
         if not selected_dates:
             st.info("📭 В выбранном диапазоне нет дат для отображения.")
         else:
