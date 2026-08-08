@@ -934,6 +934,12 @@ def main():
         all_specs = ['Нет данных'] + all_specs
     colors = assign_colors(all_specs)
 
+    # Список реальных специализаций для фильтра.
+    # "Пусто" и "Нет данных" — состояния ячеек, а не специализации.
+    available_specs = sorted(
+        [spec for spec in df['spec'].unique() if spec not in ('Пусто', 'Нет данных')]
+    )
+
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
@@ -942,6 +948,17 @@ def main():
             ["⏰ Детально по часам", "📅 Обзор по периодам"],
             index=0,
         )
+
+        selected_specs = st.multiselect(
+            "Фильтр по специализациям:",
+            options=available_specs,
+            default=available_specs,
+            placeholder="Все специализации",
+            help="Можно выбрать одну или несколько специализаций. По умолчанию выбраны все.",
+        )
+
+        # Фильтр применяется до построения любого из двух графиков.
+        df_filtered = df[df['spec'].isin(selected_specs)].copy()
     
         all_dates_full = df.sort_values("date_parsed")["date_str"].unique().tolist()
         all_dates_short = df.sort_values("date_parsed")["date_short"].unique().tolist()
@@ -1005,9 +1022,10 @@ def main():
                 selected_dates = []
                 date_range_label = selected_date
 
-        st.markdown("**🩺 Специализации:**")
-        for spec in sorted(colors.keys()):
-            if spec in ('Пусто', 'Нет данных', 'Администрация'):
+        st.divider()
+        st.markdown("**🩺 Легенда:**")
+        for spec in selected_specs:
+            if spec == 'Администрация':
                 continue
             color = colors.get(spec, '#999')
             st.markdown(
@@ -1039,7 +1057,7 @@ def main():
             )
 
             fig = create_overview_heatmap(
-                df,
+                df_filtered,
                 selected_cabinets,
                 selected_dates,
                 colors
@@ -1051,10 +1069,10 @@ def main():
             )
 
             with st.expander("📊 Таблица данных"):
-                show = df[
-                    df['Кабинет'].isin(selected_cabinets) &
-                    df['date_short'].isin(
-                        [d for d in selected_dates if d in df['date_short'].values]
+                show = df_filtered[
+                    df_filtered['Кабинет'].isin(selected_cabinets) &
+                    df_filtered['date_short'].isin(
+                        [d for d in selected_dates if d in df_filtered['date_short'].values]
                     )
                 ][
                     ['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']
@@ -1120,7 +1138,7 @@ def main():
         # ============================================================
 
         fig = create_hourly_heatmap(
-            df,
+            df_filtered,
             selected_date,
             selected_cabinets,
             colors
@@ -1132,7 +1150,7 @@ def main():
         )
 
         with st.expander("📊 Таблица данных за день"):
-            df_day = df[df['date_str'] == selected_date]
+            df_day = df_filtered[df_filtered['date_str'] == selected_date]
 
             show = df_day[
                 df_day['Кабинет'].isin(selected_cabinets)
