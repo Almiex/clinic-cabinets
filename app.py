@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, time, timedelta
@@ -6,19 +7,6 @@ import re
 import io
 
 st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
-
-# Графики НЕ масштабируются под ширину окна. На узком экране используется
-# горизонтальная прокрутка страницы/контейнера. Это особенно важно для Safari.
-st.markdown("""
-<style>
-/* Не позволяем широким Plotly-графикам сжиматься визуально. */
-section.main div[data-testid=\"stPlotlyChart\"] {
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    max-width: 100% !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46
@@ -1101,31 +1089,44 @@ def main():
                 colors
             )
 
-            # Обзор по периодам: график может сжиматься только до 30 px на ячейку.
-            # Ниже 30 px Plotly не должен уменьшать ячейки — широкая часть уходит
-            # в горизонтальный overflow. Почасовой график ниже НЕ изменяем.
-            overview_cell_size = 46
-            overview_min_cell_size = 30
-            overview_max_content_width = 1400
-            if len(selected_dates) > 0:
-                available_width = overview_max_content_width - 120
-                overview_cell_size = min(46, max(
-                    overview_min_cell_size,
-                    available_width / len(selected_dates)
-                ))
+            # ============================================================
+            # ТОЛЬКО «ОБЗОР ПО ПЕРИОДАМ»
+            # Ячейка не может стать уже 30 px.
+            # До 30 px график сжимается, ниже — НЕ сжимается вообще,
+            # а внутренняя область получает горизонтальный scroll.
+            # Почасовой график ниже НЕ ИЗМЕНЯЕМ.
+            # ============================================================
+            n_dates = len(selected_dates)
+            overview_cell_size = max(30, min(46, 1400 / max(n_dates, 1)))
+            overview_width = int(n_dates * overview_cell_size + 120)
 
             fig.update_layout(
-                width=max(
-                    400,
-                    int(len(selected_dates) * overview_cell_size + 120)
-                ),
+                width=overview_width,
                 autosize=False,
             )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=False,
-                config={"responsive": False, "displayModeBar": False}
+            # Streamlit может вписать Plotly в доступную ширину. Поэтому
+            # только обзорный график рендерим внутри собственного контейнера:
+            # внутренняя ширина фиксирована, а переполнение прокручивается.
+            overview_html = fig.to_html(
+                full_html=False,
+                include_plotlyjs=True,
+                config={
+                    "responsive": False,
+                    "displayModeBar": False,
+                },
+            )
+
+            components.html(
+                f"""
+                <div style="width:100%; overflow-x:auto; overflow-y:hidden;">
+                    <div style="width:{overview_width}px; min-width:{overview_width}px;">
+                        {overview_html}
+                    </div>
+                </div>
+                """,
+                height=int(fig.layout.height) + 20,
+                scrolling=False,
             )
 
             with st.expander("📊 Таблица данных"):
