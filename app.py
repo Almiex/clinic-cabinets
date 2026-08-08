@@ -7,11 +7,31 @@ import io
 
 st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
 
+# Графики НЕ масштабируются под ширину окна. На узком экране используется
+# горизонтальная прокрутка страницы/контейнера. Это особенно важно для Safari.
+st.markdown("""
+<style>
+/* Не позволяем широким Plotly-графикам сжиматься визуально. */
+section.main div[data-testid=\"stPlotlyChart\"] {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    max-width: 100% !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46
+MIN_CELL_SIZE = 30
 MARKER_SIZE = 42
 BORDER_WIDTH = 1.5
 BORDER_COLOR = '#444444'
+
+
+def get_chart_dimensions(n_rows, n_cols):
+    min_width = n_cols * MIN_CELL_SIZE + 120
+    target_width = n_cols * CELL_SIZE + 120
+    return max(min_width, target_width), max(n_rows * CELL_SIZE + 160, 200)
 
 # ==================== НОРМАЛИЗАЦИЯ ====================
 SPEC_MAP = {
@@ -623,6 +643,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
         font=dict(size=12),
         margin=dict(l=80, r=40, t=60, b=100),
         showlegend=False,
+        autosize=False,
         shapes=shapes,
     )
     return fig
@@ -885,6 +906,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         font=dict(size=12),
         margin=dict(l=80, r=40, t=60, b=100),
         showlegend=False,
+        autosize=False,
     )
     return fig
 
@@ -1029,10 +1051,6 @@ def main():
                 if spec in available_specs
             ]
 
-            # Если список стал пустым после изменения данных,
-            # возвращаем выбор всех специализаций.
-            if not st.session_state.selected_specs_filter and available_specs:
-                st.session_state.selected_specs_filter = available_specs.copy()
 
         with st.expander("Фильтр по специализациям", expanded=False):
             selected_specs = st.multiselect(
@@ -1089,7 +1107,8 @@ def main():
 
             st.plotly_chart(
                 fig,
-                use_container_width=False
+                use_container_width=False,
+                config={"responsive": False, "displayModeBar": False}
             )
 
             with st.expander("📊 Таблица данных"):
@@ -1170,7 +1189,8 @@ def main():
 
         st.plotly_chart(
             fig,
-            use_container_width=False
+            use_container_width=False,
+            config={"responsive": False, "displayModeBar": False}
         )
 
         with st.expander("📊 Таблица данных за день"):
