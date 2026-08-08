@@ -978,26 +978,26 @@ def main():
         #     selected_dates = []
         #     date_range_label = selected_date
 
-         else:
-            # Дата для почасового просмотра.
-            # Храним индекс выбранной даты, чтобы кнопки
-            # "предыдущий / следующий день" работали корректно.
+        else:
+            # Индекс текущей даты для навигации по дням
             if 'hourly_date_index' not in st.session_state:
                 st.session_state.hourly_date_index = len(all_dates_full) - 1
 
-            # Если набор дат изменился после загрузки нового файла —
-            # приводим индекс к допустимому диапазону.
-            st.session_state.hourly_date_index = max(
-                0,
-                min(
-                    st.session_state.hourly_date_index,
-                    len(all_dates_full) - 1
+            # Защита от выхода за границы после загрузки другого файла
+            if all_dates_full:
+                st.session_state.hourly_date_index = max(
+                    0,
+                    min(
+                        st.session_state.hourly_date_index,
+                        len(all_dates_full) - 1
+                    )
                 )
-            )
 
-            selected_date = all_dates_full[
-                st.session_state.hourly_date_index
-            ]
+                selected_date = all_dates_full[
+                    st.session_state.hourly_date_index
+                ]
+            else:
+                selected_date = None
 
             selected_dates = []
             date_range_label = selected_date
@@ -1032,40 +1032,62 @@ def main():
         if not selected_dates:
             st.info("📭 В выбранном диапазоне нет дат для отображения.")
         else:
-            st.subheader(f"📅 Обзор с {date_range_label} ({len(selected_dates)} дн.)")
-            fig = create_overview_heatmap(df, selected_cabinets, selected_dates, colors)
-            st.plotly_chart(fig, use_container_width=False)
+            st.subheader(
+                f"📅 Обзор с {date_range_label} ({len(selected_dates)} дн.)"
+            )
+
+            fig = create_overview_heatmap(
+                df,
+                selected_cabinets,
+                selected_dates,
+                colors
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=False
+            )
 
             with st.expander("📊 Таблица данных"):
                 show = df[
                     df['Кабинет'].isin(selected_cabinets) &
-                    df['date_short'].isin([d for d in selected_dates if d in df['date_short'].values])
-                ][['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']]
+                    df['date_short'].isin(
+                        [d for d in selected_dates if d in df['date_short'].values]
+                    )
+                ][
+                    ['date_str', 'Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']
+                ]
+
                 show = show.rename(columns={
                     'date_str': 'Дата',
                     'doctor_initials': 'Врач',
                     'spec': 'Специализация',
                     'hours': 'Часы',
                 })
+
                 show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
-                show = show.sort_values(['Дата', '_sort_key', 'Период']).drop(columns=['_sort_key'])
-                st.dataframe(show, use_container_width=True, hide_index=True)
 
-    # else:
-    #     st.subheader(f"⏰ Почасовая карта — {selected_date}")
-    #     fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors)
-    #     st.plotly_chart(fig, use_container_width=False)
+                show = show.sort_values(
+                    ['Дата', '_sort_key', 'Период']
+                ).drop(columns=['_sort_key'])
 
-     else:
+                st.dataframe(
+                    show,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+    else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
 
         # ============================================================
         # НАВИГАЦИЯ ПО ДНЯМ
         # ============================================================
+
         current_index = st.session_state.hourly_date_index
         total_dates = len(all_dates_full)
 
-        col_prev, col_next, col_space = st.columns([1, 1, 8])
+        col_prev, col_next, col_space = st.columns([1.5, 1.5, 7])
 
         with col_prev:
             previous_day = st.button(
@@ -1094,31 +1116,45 @@ def main():
         # ============================================================
         # ПОЧАСОВАЯ КАРТА
         # ============================================================
+
         fig = create_hourly_heatmap(
             df,
-            selected_cabinets,
             selected_date,
+            selected_cabinets,
             colors
         )
 
         st.plotly_chart(
             fig,
             use_container_width=False
-        )       
+        )
 
         with st.expander("📊 Таблица данных за день"):
             df_day = df[df['date_str'] == selected_date]
-            show = df_day[df_day['Кабинет'].isin(selected_cabinets)][
+
+            show = df_day[
+                df_day['Кабинет'].isin(selected_cabinets)
+            ][
                 ['Кабинет', 'doctor_initials', 'spec', 'Период', 'hours']
             ]
+
             show = show.rename(columns={
                 'doctor_initials': 'Врач',
                 'spec': 'Специализация',
                 'hours': 'Часы',
             })
+
             show['_sort_key'] = show['Кабинет'].map(cabinet_sort_key)
-            show = show.sort_values(['_sort_key', 'Период']).drop(columns=['_sort_key'])
-            st.dataframe(show, use_container_width=True, hide_index=True)
+
+            show = show.sort_values(
+                ['_sort_key', 'Период']
+            ).drop(columns=['_sort_key'])
+
+            st.dataframe(
+                show,
+                use_container_width=True,
+                hide_index=True
+            )
 
 
 if __name__ == "__main__":
