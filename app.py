@@ -993,17 +993,31 @@ def main():
                     )
                 )
 
-        selected_date = st.selectbox(
-            "Дата:",
-            all_dates_full,
-            index=st.session_state.hourly_date_index
+     else:
+    # Индекс текущей даты для навигации по дням
+    if 'hourly_date_index' not in st.session_state:
+        st.session_state.hourly_date_index = 0
+
+    # Защита от выхода за границы после загрузки другого файла
+    if all_dates_full:
+        st.session_state.hourly_date_index = max(
+            0,
+            min(
+                st.session_state.hourly_date_index,
+                len(all_dates_full) - 1
+            )
         )
 
-        # синхронизируем индекс с выбранной датой
-        st.session_state.hourly_date_index = all_dates_full.index(selected_date)
+    selected_date = st.selectbox(
+        "Дата:",
+        all_dates_full,
+        index=st.session_state.hourly_date_index
+    )
 
-        selected_dates = []
-        date_range_label = selected_date
+    st.session_state.hourly_date_index = all_dates_full.index(selected_date)
+
+    selected_dates = []
+    date_range_label = selected_date
 
 
         st.divider()
