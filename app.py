@@ -292,7 +292,6 @@ def parse_excel_new(file_bytes):
     except Exception:
         df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, skiprows=skiprows)
 
-    # Защита: если столбцов меньше 5 — файл некорректный
     if df.shape[1] < 5:
         return pd.DataFrame()
 
@@ -313,7 +312,6 @@ def parse_excel_new(file_bytes):
     df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
 
     def parse_period(p):
-        # Поддержка пробелов вокруг дефиса: "09:00 - 18:00"
         m = re.match(r'(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})', str(p))
         if m:
             h1, m1, h2, m2 = map(int, m.groups())
@@ -327,7 +325,6 @@ def parse_excel_new(file_bytes):
     df['surname'] = df['Доктор'].apply(get_display_name)
     df['doctor_initials'] = df['Доктор'].apply(get_initials)
 
-    # Векторизованный расчёт часов (вместо apply(axis=1))
     def time_to_min(t):
         return t.hour * 60 + t.minute if pd.notna(t) else None
 
@@ -342,6 +339,16 @@ def parse_excel_new(file_bytes):
 
 
 # ==================== ВИЗУАЛИЗАЦИИ ====================
+
+def hex_to_rgba(hex_color, alpha):
+    """Преобразует #RRGGBB в rgba(R,G,B,alpha)."""
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return f'rgba({r},{g},{b},{alpha})'
+
+
 def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     df_f = df[df['Кабинет'].isin(selected_cabinets)].copy()
 
@@ -366,7 +373,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
 
     dates_with_data = set(df_f['date_short'].unique()) if not df_f.empty else set()
 
-    # Векторизованная замена grid.apply(axis=1)
     mask_na = grid['spec'].isna()
     mask_empty = mask_na & grid['date_short'].isin(dates_with_data)
     mask_no_data = mask_na & ~grid['date_short'].isin(dates_with_data)
@@ -375,14 +381,23 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     grid.loc[mask_no_data, ['spec', 'doctor_initials', 'hours']] = ['Нет данных', 'Нет данных', 0.0]
 
     x_list, y_list, c_list, h_list = [], [], [], []
-    # zip вместо itertuples — безопасно для кириллических имён колонок
     for date_short, cab, spec, period, doctor_initials, hours in zip(
         grid['date_short'], grid['Кабинет'], grid['spec'],
         grid['Период'], grid['doctor_initials'], grid['hours']
     ):
         x_list.append(date_short)
         y_list.append(cab)
-        c_list.append(colors.get(spec, '#999'))
+
+        base_color = colors.get(spec, '#999')
+        if spec in ('Пусто', 'Нет данных'):
+            cell_color = base_color
+        else:
+            # Насыщенность цвета = загрузка (8 ч — полный цвет, <2 ч — почти белый)
+            alpha = min(max(hours / 8.0, 0.2), 1.0) if hours else 0.2
+            cell_color = hex_to_rgba(base_color, alpha)
+
+        c_list.append(cell_color)
+
         if spec == 'Нет данных':
             h_list.append(f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {date_short}<br>Нет данных")
         elif spec == 'Пусто':
@@ -400,7 +415,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
     n_rows = len(all_cabs)
     n_cols = len(all_dates)
 
-    # Защита от нулевой ширины
     if n_rows == 0 or n_cols == 0:
         fig = go.Figure()
         fig.update_layout(title="Нет данных для отображения")
@@ -659,7 +673,6 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
     n_rows = len(all_display_y)
     n_cols = len(hours)
 
-    # Защита от нулевой ширины
     if n_rows == 0 or n_cols == 0:
         fig = go.Figure()
         fig.update_layout(title="Нет данных для отображения")
@@ -726,7 +739,6 @@ def main():
         st.info("👆 Загрузите файл с отчётом о загрузке кабинетов.")
         return
 
-    # Читаем файл один раз
     file_bytes = uploaded_file.read()
     clinic_name = extract_clinic_name(file_bytes)
 
@@ -738,7 +750,8 @@ def main():
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
-        "Наведите на ячейку для подробной информации &nbsp;|&nbsp; "
+        "Насыщенность = <b>загрузка за день</b> &nbsp;|&nbsp; "
+        "Наведите для подробностей &nbsp;|&nbsp; "
         "Серый = <b>Пусто</b> &nbsp;|&nbsp; "
         "Белый = <b>Нет данных</b>"
         "</p>",
@@ -770,7 +783,6 @@ def main():
             index=0,
         )
 
-        # Убраны повторные strptime — используем уже распарсенные даты
         all_dates_full = df.sort_values('date_parsed')['date_str'].unique().tolist()
         all_dates_short = df.sort_values('date_parsed')['date_short'].unique().tolist()
 
@@ -832,7 +844,6 @@ def main():
         )
 
     if mode == "📅 Обзор по дням":
-        # Защита: если диапазон пуст — не пытаемся рисовать
         if not selected_dates:
             st.info("📭 В выбранном диапазоне нет дат для отображения.")
         else:
