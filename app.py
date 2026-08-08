@@ -119,25 +119,60 @@ EXTRA_PALETTE = [
 ]
 
 
+# def normalize_spec(raw):
+#     if pd.isna(raw):
+#         return 'Прочее'
+#     s = str(raw).strip()
+#     s_lower = s.lower()
+
+#     # 1) Exact match по полной строке
+#     if s_lower in SPEC_MAP:
+#         return SPEC_MAP[s_lower]
+
+#     # 2) Exact match по первой части до запятой
+#     first_part = s.split(',')[0].strip().lower()
+#     if first_part in SPEC_MAP:
+#         return SPEC_MAP[first_part]
+
+#     # 3) Fallback: подстрока, но от длинных ключей к коротким
+#     #    (чтобы «колопроктолог, хирург» всегда побеждал «хирург»)
+#     for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+#         if key in s_lower:
+#             return val
+
+#     return 'Прочее'
+
 def normalize_spec(raw):
     if pd.isna(raw):
         return 'Прочее'
-    s = str(raw).strip()
-    s_lower = s.lower()
+    s = str(raw).strip().lower()
 
-    # 1) Exact match по полной строке
-    if s_lower in SPEC_MAP:
-        return SPEC_MAP[s_lower]
+    # ОЧИСТКА: убираем (кво), (КВО) и любой текст в скобках,
+    # нормализуем пробелы вокруг дефисов, сжимаем двойные пробелы
+    s = re.sub(r'\s*\([^)]*\)', '', s)   # "хирург(кво)" → "хирург"
+    s = re.sub(r'\s*-\s*', '-', s)       # "травматолог - ортопед" → "травматолог-ортопед"
+    s = re.sub(r'\s+', ' ', s).strip()   # лишние пробелы
 
-    # 2) Exact match по первой части до запятой
-    first_part = s.split(',')[0].strip().lower()
+    # 1) Exact match по очищенной полной строке
+    if s in SPEC_MAP:
+        return SPEC_MAP[s]
+
+    # 2) Exact match по первой части до запятой (очищенной)
+    first_part = s.split(',')[0].strip()
     if first_part in SPEC_MAP:
         return SPEC_MAP[first_part]
 
-    # 3) Fallback: подстрока, но от длинных ключей к коротким
-    #    (чтобы «колопроктолог, хирург» всегда побеждал «хирург»)
+    # 3) Проверка первого слова (последовательности букв)
+    #    Например, "травматолог-ортопед..." → "травматолог"
+    m = re.match(r'^([а-яё]+)', s)
+    if m:
+        first_word = m.group(1)
+        if first_word in SPEC_MAP:
+            return SPEC_MAP[first_word]
+
+    # 4) Fallback: подстрока от длинных ключей к коротким
     for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(x[0]), reverse=True):
-        if key in s_lower:
+        if key in s:
             return val
 
     return 'Прочее'
