@@ -7,6 +7,27 @@ import io
 
 st.set_page_config(page_title="График загрузки кабинетов", layout="wide")
 
+# Фиксируем внутренний размер Plotly-графиков. На узких экранах
+# появляется горизонтальный скролл вместо масштабирования/сжатия.
+st.markdown(
+    """
+    <style>
+    div[data-testid="stPlotlyChart"] {
+        width: 100%;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+    }
+    div[data-testid="stPlotlyChart"] > div {
+        min-width: max-content !important;
+    }
+    div[data-testid="stPlotlyChart"] .plotly {
+        max-width: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46
 MARKER_SIZE = 42
@@ -444,8 +465,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
                     hover_text.append(
                         f"<b>Кабинет:</b> {cab}<br><b>Дата:</b> {date_short}<br>Нет данных"
                     )
-                hover_x.append(date_short)
-                hover_y.append(cab)
+                hover_x.append(i_date)
+                hover_y.append(i_cab)
                 continue
 
             # Группируем записи по специализации, суммируем часы
@@ -558,8 +579,8 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
                 layer='above'
             ))
 
-            hover_x.append(date_short)
-            hover_y.append(cab)
+            hover_x.append(i_date)
+            hover_y.append(i_cab)
             hover_text.append(
                 f"<b>Кабинет:</b> {cab}<br>"
                 f"<b>Дата:</b> {date_short}<br>"
@@ -603,26 +624,35 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
         yaxis_title='Кабинет',
         height=height,
         width=width,
+        # Числовые оси дают строго одинаковую геометрию для
+        # shape, текста и hover в Safari/macOS.
         yaxis=dict(
-            type='category',
-            categoryorder='array',
-            categoryarray=all_cabs,
-            autorange='reversed',
-            dtick=1,
+            type='linear',
+            range=[n_rows - 0.5, -0.5],
+            tickmode='array',
+            tickvals=list(range(n_rows)),
+            ticktext=all_cabs,
             showgrid=False,
+            fixedrange=True,
+            zeroline=False,
         ),
         xaxis=dict(
-            categoryorder='array',
-            categoryarray=all_dates,
-            dtick=1,
+            type='linear',
+            range=[-0.5, n_cols - 0.5],
+            tickmode='array',
+            tickvals=list(range(n_cols)),
+            ticktext=all_dates,
             showgrid=False,
-            type='category',
+            fixedrange=True,
+            zeroline=False,
         ),
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=60, b=100),
         showlegend=False,
+        hovermode='closest',
+        autosize=False,
         shapes=shapes,
     )
     return fig
@@ -703,6 +733,8 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         if special_count >= 1 and normal_count >= 2:
             needs_split.add(cab)
 
+    hour_to_idx = {h: i for i, h in enumerate(hours)}
+
     display_cells = []
 
     for (cab, h), entries in cell_data.items():
@@ -737,7 +769,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                         cell_color = colors.get(base_spec, '#999')
 
                 display_cells.append({
-                    'x': h,
+                    'x': hour_to_idx[h],
                     'y': f"{cab}.{sub_idx}",
                     'color': cell_color,
                     'text': display_text,
@@ -757,7 +789,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
                 txt = ', '.join(docs)
 
                 display_cells.append({
-                    'x': h,
+                    'x': hour_to_idx[h],
                     'y': f"{cab}.{sub_idx}",
                     'color': colors.get(specs[0], '#999'),
                     'text': abbreviate(unused[0]['surname']),
@@ -815,7 +847,7 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         for h in hours:
             if (h, cab) not in filled:
                 display_cells.append({
-                    'x': h,
+                    'x': hour_to_idx[h],
                     'y': cab,
                     'color': colors.get('Пусто', '#999'),
                     'text': '',
@@ -824,8 +856,10 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
     display_cells.sort(key=lambda c: (cabinet_sort_key(c['y']), c['x']))
 
+    y_to_idx = {cab: i for i, cab in enumerate(all_display_y)}
+
     x_list = [c['x'] for c in display_cells]
-    y_list = [c['y'] for c in display_cells]
+    y_list = [y_to_idx[c['y']] for c in display_cells]
     c_list = [c['color'] for c in display_cells]
     t_list = [c['text'] for c in display_cells]
     h_list = [c['hover'] for c in display_cells]
@@ -865,26 +899,35 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
         yaxis_title='Кабинет',
         height=height,
         width=width,
+        # Числовые оси: одна координатная единица = одна ячейка.
         yaxis=dict(
-            type='category',
-            categoryorder='array',
-            categoryarray=all_display_y,
-            autorange='reversed',
-            dtick=1,
+            type='linear',
+            range=[n_rows - 0.5, -0.5],
+            tickmode='array',
+            tickvals=list(range(n_rows)),
+            ticktext=all_display_y,
             showgrid=False,
+            fixedrange=True,
+            zeroline=False,
         ),
         xaxis=dict(
-            categoryorder='array',
-            categoryarray=hours,
-            dtick=1,
+            type='linear',
+            range=[-0.5, n_cols - 0.5],
+            tickmode='array',
+            tickvals=list(range(n_cols)),
+            ticktext=hours,
             showgrid=False,
             tickangle=45,
+            fixedrange=True,
+            zeroline=False,
         ),
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(size=12),
         margin=dict(l=80, r=40, t=60, b=100),
         showlegend=False,
+        hovermode='closest',
+        autosize=False,
     )
     return fig
 
