@@ -122,9 +122,16 @@ EXTRA_PALETTE = [
 def normalize_spec(raw):
     if pd.isna(raw):
         return 'Прочее'
-    s = str(raw).strip().lower()
+    s = str(raw).strip()
+    # Приоритет — первая часть до запятой (первое слово/фраза)
+    first_part = s.split(',')[0].strip().lower()
     for key, val in SPEC_MAP.items():
-        if key in s:
+        if key == first_part:
+            return val
+    # Fallback: поиск по всей строке, как раньше
+    s_lower = s.lower()
+    for key, val in SPEC_MAP.items():
+        if key in s_lower:
             return val
     return 'Прочее'
 
