@@ -890,6 +890,201 @@ def create_hourly_heatmap(df, selected_date, selected_cabinets, colors):
 
 
 # ==================== ПРИЛОЖЕНИЕ ====================
+# ==================== АНАЛИТИКА ЗАГРУЗКИ КЛИНИКИ ====================
+
+# Кабинеты, которые считаем закреплёнными за функцией и не включаем
+# в расчёт потенциально перераспределяемой врачебной мощности.
+ANALYTICS_EXCLUDED_SPECS = {
+    'Рентген', 'Перевязочная', 'Стационар', 'Процедурные',
+    'Физиотерапия', 'Лаборатория', 'Забор биоматериала', 'КВС',
+}
+ANALYTICS_EXCLUDED_KEYWORDS = (
+    'рентген', 'перевязоч', 'дневной стационар', 'процедурн',
+    'физиотерап', 'лаборатор', 'биоматериал', 'операционн',
+)
+ANALYTICS_DAY_START = 8 * 60
+ANALYTICS_DAY_END = 20 * 60
+
+
+def _row_is_stable_entity(row):
+    spec = str(row.get('spec', '')).strip()
+    surname = str(row.get('surname', '')).strip().lower()
+    return spec in ANALYTICS_EXCLUDED_SPECS or any(
+        keyword in surname for keyword in ANALYTICS_EXCLUDED_KEYWORDS
+    )
+
+
+def _interval_union_minutes(intervals, start_limit=ANALYTICS_DAY_START, end_limit=ANALYTICS_DAY_END):
+    """Суммарная длина объединения интервалов без двойного счёта пересечений."""
+    clipped = []
+    for start, end in intervals:
+        start = max(start, start_limit)
+        end = min(end, end_limit)
+        if end > start:
+            clipped.append((start, end))
+    if not clipped:
+        return 0.0
+    clipped.sort()
+    total = 0
+    cur_start, cur_end = clipped[0]
+    for start, end in clipped[1:]:
+        if start <= cur_end:
+            cur_end = max(cur_end, end)
+        else:
+            total += cur_end - cur_start
+            cur_start, cur_end = start, end
+    return float(total + cur_end - cur_start)
+
+
+def _analytics_base_df(df, stable_cabinets_override=None):
+    """Удаляет из аналитики кабинеты, занятые стабильными сущностями."""
+    if df.empty:
+        return df.copy(), list(stable_cabinets_override or [])
+    if stable_cabinets_override is None:
+        stable_mask = df.apply(_row_is_stable_entity, axis=1)
+        stable_cabinets = sorted(
+            df.loc[stable_mask, 'Кабинет'].dropna().astype(str).unique().tolist(),
+            key=cabinet_sort_key
+        )
+    else:
+        stable_cabinets = list(stable_cabinets_override)
+    result = df[~df['Кабинет'].astype(str).isin(stable_cabinets)].copy()
+    return result, stable_cabinets
+
+
+def calculate_daily_clinic_load(df, selected_date, selected_cabinets, stable_cabinets=None):
+    """Почасовая загрузка клиники за день по занятости кабинетов."""
+    base, stable_cabinets = _analytics_base_df(df, stable_cabinets)
+    base = base[
+        (base['date_str'] == selected_date) &
+        (base['Кабинет'].isin(selected_cabinets))
+    ].copy()
+    if base.empty:
+        return pd.DataFrame(columns=['Время', 'Загрузка', 'Занято', 'Всего кабинетов']), stable_cabinets
+
+    cabinets = sorted(
+        [str(c) for c in selected_cabinets if str(c) not in set(stable_cabinets)],
+        key=cabinet_sort_key
+    )
+    rows = []
+    for hour in range(8, 20):
+        slot_start, slot_end = hour * 60, (hour + 1) * 60
+        occupied = 0
+        for cab in cabinets:
+            cab_rows = base[base['Кабинет'].astype(str) == cab]
+            intervals = [
+                (r['start_time'].hour * 60 + r['start_time'].minute,
+                 r['end_time'].hour * 60 + r['end_time'].minute)
+                for _, r in cab_rows.iterrows()
+                if pd.notna(r['start_time']) and pd.notna(r['end_time'])
+            ]
+            if _interval_union_minutes(intervals, slot_start, slot_end) > 0:
+                occupied += 1
+        total = len(cabinets)
+        rows.append({
+            'Время': f'{hour:02d}:00',
+            'Загрузка': occupied / total * 100 if total else 0,
+            'Занято': occupied,
+            'Всего кабинетов': total,
+        })
+    return pd.DataFrame(rows), stable_cabinets
+
+
+def calculate_period_clinic_load(df, selected_dates, selected_cabinets, stable_cabinets=None):
+    """Дневная загрузка клиники за выбранный период."""
+    base, stable_cabinets = _analytics_base_df(df, stable_cabinets)
+    base = base[
+        base['date_short'].isin(selected_dates) &
+        base['Кабинет'].isin(selected_cabinets)
+    ].copy()
+    rows = []
+    for date_short in selected_dates:
+        day = base[base['date_short'] == date_short]
+        cabinets = sorted(
+            [str(c) for c in selected_cabinets if str(c) not in set(stable_cabinets)],
+            key=cabinet_sort_key
+        )
+        occupied_minutes_total = 0.0
+        for cab in cabinets:
+            cab_rows = day[day['Кабинет'].astype(str) == cab]
+            intervals = [
+                (r['start_time'].hour * 60 + r['start_time'].minute,
+                 r['end_time'].hour * 60 + r['end_time'].minute)
+                for _, r in cab_rows.iterrows()
+                if pd.notna(r['start_time']) and pd.notna(r['end_time'])
+            ]
+            occupied_minutes_total += _interval_union_minutes(intervals)
+        capacity = len(cabinets) * (ANALYTICS_DAY_END - ANALYTICS_DAY_START)
+        rows.append({
+            'Дата': date_short,
+            'Загрузка': occupied_minutes_total / capacity * 100 if capacity else 0,
+            'Занято часов': occupied_minutes_total / 60,
+            'Кабинетов': len(cabinets),
+        })
+    return pd.DataFrame(rows), stable_cabinets
+
+
+def render_clinic_analytics(hourly_df=None, period_df=None, stable_cabinets=None,
+                            title='📈 Загрузка клиники'):
+    """График + KPI аналитики под таблицей данных."""
+    st.markdown('---')
+    st.subheader(title)
+    data = hourly_df if hourly_df is not None else period_df
+    if data is None or data.empty:
+        st.info('Недостаточно данных для расчёта загрузки клиники.')
+        return
+
+    avg_load = float(data['Загрузка'].mean())
+    peak_load = float(data['Загрузка'].max())
+    min_load = float(data['Загрузка'].min())
+    peak_row = data.loc[data['Загрузка'].idxmax()]
+    min_row = data.loc[data['Загрузка'].idxmin()]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric('Средняя загрузка', f'{avg_load:.0f}%')
+    c2.metric('Пиковая загрузка', f'{peak_load:.0f}%')
+    c3.metric('Минимальная загрузка', f'{min_load:.0f}%')
+    if hourly_df is not None:
+        c4.metric('Часов ≥ 80%', int((data['Загрузка'] >= 80).sum()))
+        x = data['Время'].tolist()
+        x_title = 'Время'
+        chart_title = 'Загрузка кабинетов по часам'
+        peak_label = peak_row['Время']
+        min_label = min_row['Время']
+    else:
+        c4.metric('Дней ≥ 80%', int((data['Загрузка'] >= 80).sum()))
+        x = data['Дата'].tolist()
+        x_title = 'Дата'
+        chart_title = 'Загрузка кабинетов по дням'
+        peak_label = peak_row['Дата']
+        min_label = min_row['Дата']
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x, y=data['Загрузка'], mode='lines+markers',
+        line=dict(width=3), marker=dict(size=7),
+        hovertemplate='%{x}<br>Загрузка: %{y:.0f}%<extra></extra>',
+        name='Загрузка',
+    ))
+    fig.add_hline(y=80, line_dash='dash', annotation_text='80%')
+    fig.update_layout(
+        title=chart_title, xaxis_title=x_title, yaxis_title='Загрузка, %',
+        yaxis=dict(range=[0, 100]), height=360,
+        margin=dict(l=60, r=30, t=60, b=50),
+        plot_bgcolor='white', paper_bgcolor='white',
+        hovermode='x unified', showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    notes = [
+        f'**Пик:** {peak_label} — {peak_load:.0f}%.',
+        f'**Минимум:** {min_label} — {min_load:.0f}%.',
+    ]
+    if stable_cabinets:
+        names = ', '.join(stable_cabinets[:12]) + (' …' if len(stable_cabinets) > 12 else '')
+        notes.append(f'Исключено закреплённых кабинетов: **{len(stable_cabinets)}** ({names}).')
+    st.markdown(' '.join(notes))
+
 def main():
     uploaded_file = st.file_uploader(
         "📁 Загрузите отчёт Excel ( .xlsx)", type=['xlsx', 'xls']
@@ -1045,6 +1240,9 @@ def main():
 
         # Фильтр применяется до построения любого из двух графиков.
         df_filtered = df[df['spec'].isin(selected_specs)].copy()
+        # Список закреплённых кабинетов определяем по исходному набору данных,
+        # чтобы фильтр специализаций не смог случайно вернуть их в аналитику.
+        _, analytics_stable_cabinets = _analytics_base_df(df)
 
         st.divider()
         st.markdown("**🩺 Легенда:**")
@@ -1120,6 +1318,14 @@ def main():
                     use_container_width=True,
                     hide_index=True
                 )
+
+            period_load, stable_cabinets = calculate_period_clinic_load(
+                df_filtered, selected_dates, selected_cabinets, analytics_stable_cabinets
+            )
+            render_clinic_analytics(
+                period_df=period_load,
+                stable_cabinets=stable_cabinets
+            )
 
     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
@@ -1199,6 +1405,14 @@ def main():
                 use_container_width=True,
                 hide_index=True
             )
+
+        hourly_load, stable_cabinets = calculate_daily_clinic_load(
+            df_filtered, selected_date, selected_cabinets, analytics_stable_cabinets
+        )
+        render_clinic_analytics(
+            hourly_df=hourly_load,
+            stable_cabinets=stable_cabinets
+        )
 
 
 if __name__ == "__main__":
