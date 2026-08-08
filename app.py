@@ -22,16 +22,9 @@ section.main div[data-testid=\"stPlotlyChart\"] {
 
 # ==================== ЕДИНЫЙ СТИЛЬ ====================
 CELL_SIZE = 46
-MIN_CELL_SIZE = 30
 MARKER_SIZE = 42
 BORDER_WIDTH = 1.5
 BORDER_COLOR = '#444444'
-
-
-def get_chart_dimensions(n_rows, n_cols):
-    min_width = n_cols * MIN_CELL_SIZE + 120
-    target_width = n_cols * CELL_SIZE + 120
-    return max(min_width, target_width), max(n_rows * CELL_SIZE + 160, 200)
 
 # ==================== НОРМАЛИЗАЦИЯ ====================
 SPEC_MAP = {
@@ -1051,6 +1044,9 @@ def main():
                 if spec in available_specs
             ]
 
+            # Пустой список — это валидное состояние фильтра: пользователь мог
+            # нажать крестик и снять все специализации. Не восстанавливаем все
+            # значения автоматически.
 
         with st.expander("Фильтр по специализациям", expanded=False):
             selected_specs = st.multiselect(
@@ -1103,6 +1099,27 @@ def main():
                 selected_cabinets,
                 selected_dates,
                 colors
+            )
+
+            # Обзор по периодам: график может сжиматься только до 30 px на ячейку.
+            # Ниже 30 px Plotly не должен уменьшать ячейки — широкая часть уходит
+            # в горизонтальный overflow. Почасовой график ниже НЕ изменяем.
+            overview_cell_size = 46
+            overview_min_cell_size = 30
+            overview_max_content_width = 1400
+            if len(selected_dates) > 0:
+                available_width = overview_max_content_width - 120
+                overview_cell_size = min(46, max(
+                    overview_min_cell_size,
+                    available_width / len(selected_dates)
+                ))
+
+            fig.update_layout(
+                width=max(
+                    400,
+                    int(len(selected_dates) * overview_cell_size + 120)
+                ),
+                autosize=False,
             )
 
             st.plotly_chart(
