@@ -973,10 +973,35 @@ def main():
                 selected_dates = all_dates_short[-7:]
                 date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
             selected_date = None
-        else:
-            selected_date = st.selectbox("Дата:", all_dates_full)
+        # else:
+        #     selected_date = st.selectbox("Дата:", all_dates_full)
+        #     selected_dates = []
+        #     date_range_label = selected_date
+
+         else:
+            # Дата для почасового просмотра.
+            # Храним индекс выбранной даты, чтобы кнопки
+            # "предыдущий / следующий день" работали корректно.
+            if 'hourly_date_index' not in st.session_state:
+                st.session_state.hourly_date_index = len(all_dates_full) - 1
+
+            # Если набор дат изменился после загрузки нового файла —
+            # приводим индекс к допустимому диапазону.
+            st.session_state.hourly_date_index = max(
+                0,
+                min(
+                    st.session_state.hourly_date_index,
+                    len(all_dates_full) - 1
+                )
+            )
+
+            selected_date = all_dates_full[
+                st.session_state.hourly_date_index
+            ]
+
             selected_dates = []
             date_range_label = selected_date
+
 
         st.divider()
         st.markdown("**🩺 Специализации:**")
@@ -1026,10 +1051,60 @@ def main():
                 show = show.sort_values(['Дата', '_sort_key', 'Период']).drop(columns=['_sort_key'])
                 st.dataframe(show, use_container_width=True, hide_index=True)
 
-    else:
+    # else:
+    #     st.subheader(f"⏰ Почасовая карта — {selected_date}")
+    #     fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors)
+    #     st.plotly_chart(fig, use_container_width=False)
+
+     else:
         st.subheader(f"⏰ Почасовая карта — {selected_date}")
-        fig = create_hourly_heatmap(df, selected_date, selected_cabinets, colors)
-        st.plotly_chart(fig, use_container_width=False)
+
+        # ============================================================
+        # НАВИГАЦИЯ ПО ДНЯМ
+        # ============================================================
+        current_index = st.session_state.hourly_date_index
+        total_dates = len(all_dates_full)
+
+        col_prev, col_next, col_space = st.columns([1, 1, 8])
+
+        with col_prev:
+            previous_day = st.button(
+                "← Предыдущий день",
+                disabled=(current_index <= 0),
+                use_container_width=True,
+                key="hourly_previous_day"
+            )
+
+        with col_next:
+            next_day = st.button(
+                "Следующий день →",
+                disabled=(current_index >= total_dates - 1),
+                use_container_width=True,
+                key="hourly_next_day"
+            )
+
+        if previous_day:
+            st.session_state.hourly_date_index -= 1
+            st.rerun()
+
+        if next_day:
+            st.session_state.hourly_date_index += 1
+            st.rerun()
+
+        # ============================================================
+        # ПОЧАСОВАЯ КАРТА
+        # ============================================================
+        fig = create_hourly_heatmap(
+            df,
+            selected_cabinets,
+            selected_date,
+            colors
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=False
+        )       
 
         with st.expander("📊 Таблица данных за день"):
             df_day = df[df['date_str'] == selected_date]
