@@ -309,7 +309,7 @@ def parse_excel_new(file_bytes):
         df['date_parsed'] = pd.to_datetime(df['Дата'], errors='coerce')
     df = df.dropna(subset=['date_parsed'])
     df['date_str'] = df['date_parsed'].dt.strftime('%d.%m.%Y')
-    df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
+    df['date_short'] = df['date_parsed'].dt.strftime('%d.%м')
 
     def parse_period(p):
         m = re.match(r'(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})', str(p))
@@ -340,13 +340,20 @@ def parse_excel_new(file_bytes):
 
 # ==================== ВИЗУАЛИЗАЦИИ ====================
 
-def hex_to_rgba(hex_color, alpha):
-    """Преобразует #RRGGBB в rgba(R,G,B,alpha)."""
+def blend_with_white(hex_color, factor):
+    """
+    Смешивает HEX-цвет с белым.
+    factor=1.0 → исходный цвет (100% загрузка)
+    factor=0.0 → белый (0% загрузка)
+    """
     hex_color = hex_color.lstrip('#')
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
-    return f'rgba({r},{g},{b},{alpha})'
+    r = int(r * factor + 255 * (1 - factor))
+    g = int(g * factor + 255 * (1 - factor))
+    b = int(b * factor + 255 * (1 - factor))
+    return f'#{r:02x}{g:02x}{b:02x}'
 
 
 def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
@@ -392,9 +399,10 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
         if spec in ('Пусто', 'Нет данных'):
             cell_color = base_color
         else:
-            # Насыщенность цвета = загрузка (8 ч — полный цвет, <2 ч — почти белый)
-            alpha = min(max(hours / 8.0, 0.2), 1.0) if hours else 0.2
-            cell_color = hex_to_rgba(base_color, alpha)
+            # 12 часов = 100% насыщенности, меньше = ближе к белому
+            # Минимум 0.15, чтобы 1 час всё ещё был виден
+            saturation = min(max(hours / 12.0, 0.15), 1.0) if hours else 0.15
+            cell_color = blend_with_white(base_color, saturation)
 
         c_list.append(cell_color)
 
@@ -750,7 +758,7 @@ def main():
     st.markdown(
         "<p style='color:#666; font-size:1.05rem;'>"
         "Цвет ячейки = <b>специализация</b> &nbsp;|&nbsp; "
-        "Насыщенность = <b>загрузка за день</b> &nbsp;|&nbsp; "
+        "Насыщенность = <b>загрузка за день</b> (12 ч = 100%) &nbsp;|&nbsp; "
         "Наведите для подробностей &nbsp;|&nbsp; "
         "Серый = <b>Пусто</b> &nbsp;|&nbsp; "
         "Белый = <b>Нет данных</b>"
