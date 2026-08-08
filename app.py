@@ -119,13 +119,28 @@ EXTRA_PALETTE = [
 ]
 
 
+def _norm_for_match(text: str) -> str:
+    """Универсальная нормализация строки для сравнения специализаций."""
+    text = text.lower()
+    # Убираем содержимое круглых скобок вместе с предшествующим пробелом
+    text = re.sub(r'\s*\([^)]*\)', '', text)
+    # Заменяем все виды тире на обычный дефис
+    text = text.replace('–', '-').replace('—', '-')
+    # Нормализуем пробелы вокруг запятых: ровно один пробел после запятой
+    text = re.sub(r'\s*,\s*', ', ', text)
+    # Схлопываем множественные пробелы
+    text = ' '.join(text.split())
+    return text.strip()
+
+
 def normalize_spec(raw):
     if pd.isna(raw):
         return 'Прочее'
+
     s = str(raw).strip()
     s_lower = s.lower()
 
-    # 1) Exact match по полной строке
+    # 1) Exact match по сырым строкам
     if s_lower in SPEC_MAP:
         return SPEC_MAP[s_lower]
 
@@ -134,10 +149,18 @@ def normalize_spec(raw):
     if first_part in SPEC_MAP:
         return SPEC_MAP[first_part]
 
-    # 3) Fallback: подстрока, но от длинных ключей к коротким
-    #    (чтобы «колопроктолог, хирург» всегда побеждал «хирург»)
+    # 3) Exact match после нормализации
+    #    Ловит: "Травматолог-ортопед, хирург(кво)" → "травматолог-ортопед, хирург"
+    #    Ловит: "Колопроктолог,хирург" → "колопроктолог, хирург"
+    #    Ловит: "Травматолог–ортопед, хирург" → "травматолог-ортопед, хирург"
+    s_norm = _norm_for_match(s)
+    for key, val in SPEC_MAP.items():
+        if _norm_for_match(key) == s_norm:
+            return val
+
+    # 4) Fallback: нормализованная подстрока, от длинных ключей к коротким
     for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(x[0]), reverse=True):
-        if key in s_lower:
+        if _norm_for_match(key) in s_norm:
             return val
 
     return 'Прочее'
@@ -557,8 +580,7 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
                 f"<b>Кабинет:</b> {cab}<br>"
                 f"<b>Дата:</b> {date_short}<br>"
                 f"<b>Время:</b><br>{'<br>'.join(period_parts)}<br>"
-                f"<b>Специализации:</b> {', '.join(spec_parts)}<br>"
-                f"<b>Врач(и):</b><br>{'<br>'.join(doctor_parts)}<br>"
+                f"<b>Специализации:</b> {', '.join(doctor_parts)}<br>"
                 f"<b>Всего часов:</b> {total_hours:.1f}"
             )
 
