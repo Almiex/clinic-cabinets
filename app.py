@@ -122,18 +122,41 @@ EXTRA_PALETTE = [
 def normalize_spec(raw):
     if pd.isna(raw):
         return 'Прочее'
-    s = str(raw).strip()
-    # Приоритет — первая часть до запятой (первое слово/фраза)
-    first_part = s.split(',')[0].strip().lower()
+
+    s = str(raw).strip().lower()
+
+    # Нормализуем пробелы вокруг запятых.
+    s = re.sub(r'\s+', ' ', s)
+    s = re.sub(r'\s*,\s*', ', ', s).strip()
+
+    # 1. Сначала точное совпадение всей строки.
+    # Явное правило SPEC_MAP имеет максимальный приоритет.
     for key, val in SPEC_MAP.items():
-        if key == first_part:
+        if s == key.lower():
             return val
-    # Fallback: поиск по всей строке, как раньше
-    s_lower = s.lower()
+
+    # 2. Затем проверяем первую специальность до запятой.
+    # Например:
+    # "травматолог-ортопед, хирург(кво)" -> "травматолог-ортопед"
+    # "колопроктолог, хирург" -> "колопроктолог"
+    first_part = s.split(',', 1)[0].strip()
     for key, val in SPEC_MAP.items():
-        if key in s_lower:
+        if first_part == key.lower():
             return val
+
+    # 3. Fallback: длинные ключи проверяем раньше коротких.
+    # Это не позволяет общему ключу "хирург" перехватывать
+    # более специфичные специализации.
+    for key, val in sorted(
+        SPEC_MAP.items(),
+        key=lambda item: len(item[0]),
+        reverse=True
+    ):
+        if key.lower() in s:
+            return val
+
     return 'Прочее'
+
 
 
 def get_display_name(full_name):
@@ -974,11 +997,46 @@ def main():
                 min_date = datetime.now().date()
                 max_date = datetime.now().date()
     
+            date_min_allowed = min_date - timedelta(days=365)
+            date_max_allowed = max_date + timedelta(days=365)
+            default_date_range = (min_date, max_date)
+
+            # Стабильный key сохраняет выбор пользователя между rerun.
+            # Это устраняет сброс даты после первого клика.
+            if "overview_date_range" not in st.session_state:
+                st.session_state.overview_date_range = default_date_range
+            else:
+                saved_range = st.session_state.overview_date_range
+
+                # При смене загруженного файла старый диапазон может
+                # оказаться вне новых допустимых границ.
+                if isinstance(saved_range, (list, tuple)) and len(saved_range) == 2:
+                    saved_start, saved_end = saved_range
+
+                    saved_start = max(
+                        date_min_allowed,
+                        min(saved_start, date_max_allowed)
+                    )
+                    saved_end = max(
+                        date_min_allowed,
+                        min(saved_end, date_max_allowed)
+                    )
+
+                    if saved_start > saved_end:
+                        saved_start, saved_end = default_date_range
+
+                    st.session_state.overview_date_range = (
+                        saved_start,
+                        saved_end
+                    )
+                else:
+                    st.session_state.overview_date_range = default_date_range
+
             date_range = st.date_input(
                 "Выберите диапазон:",
-                value=(min_date, max_date),
-                min_value=min_date - timedelta(days=365),
-                max_value=max_date + timedelta(days=365),
+                min_value=date_min_allowed,
+                max_value=date_max_allowed,
+                key="overview_date_range",
             )
     
             if len(date_range) == 2:
