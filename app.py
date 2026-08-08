@@ -937,133 +937,98 @@ def main():
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
-#НАЧАЛО
-        #===================================
-        
-    mode = st.radio(
-        "Режим:",
-        ["⏰ Детально по часам", "📅 Обзор по периодам"],
-        index=0,
-    )
-
-    all_dates_full = (
-        df.sort_values("date_parsed")["date_str"]
-        .unique()
-        .tolist()
-    )
-    all_dates_short = (
-        df.sort_values("date_parsed")["date_short"]
-        .unique()
-        .tolist()
-    )
-
-    if mode == "📅 Обзор по периодам":
-
-        if all_dates_full:
-            min_date = datetime.strptime(
-                all_dates_full[0], "%d.%m.%Y"
-            ).date()
-            max_date = datetime.strptime(
-                all_dates_full[-1], "%d.%m.%Y"
-            ).date()
-        else:
-            min_date = datetime.now().date()
-            max_date = datetime.now().date()
-
-        date_range = st.date_input(
-            "Выберите диапазон:",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date,
+        mode = st.radio(
+            "Режим:",
+            ["⏰ Детально по часам", "📅 Обзор по периодам"],
+            index=0,
         )
-
-        if len(date_range) == 2:
-            start, end = date_range
-
-            selected_dates = [
-                d
-                for d in all_dates_short
-                if start
-                <= datetime.strptime(
-                    d + ".2026",
-                    "%d.%m.%Y"
-                ).date()
-                <= end
-            ]
-
-            if selected_dates:
-                date_range_label = (
-                    f"{selected_dates[0]} – {selected_dates[-1]}"
-                )
+    
+        all_dates_full = df.sort_values("date_parsed")["date_str"].unique().tolist()
+        all_dates_short = df.sort_values("date_parsed")["date_short"].unique().tolist()
+    
+        if mode == "📅 Обзор по периодам":
+    
+            if len(all_dates_full) > 0:
+                min_date = datetime.strptime(all_dates_full[0], "%d.%m.%Y").date()
+                max_date = datetime.strptime(all_dates_full[-1], "%d.%m.%Y").date()
             else:
-                date_range_label = ""
-
-        else:
-            selected_dates = all_dates_short
-            if selected_dates:
-                date_range_label = (
-                    f"{selected_dates[0]} – {selected_dates[-1]}"
-                )
-            else:
-                date_range_label = ""
-
-        selected_date = None
-
-    else:
-
-        if "hourly_date_index" not in st.session_state:
-            st.session_state.hourly_date_index = 0
-
-        if all_dates_full:
-            st.session_state.hourly_date_index = max(
-                0,
-                min(
-                    st.session_state.hourly_date_index,
-                    len(all_dates_full) - 1,
-                ),
+                min_date = datetime.now().date()
+                max_date = datetime.now().date()
+    
+            date_range = st.date_input(
+                "Выберите диапазон:",
+                value=(min_date, max_date),
+                min_value=min_date - timedelta(days=365),
+                max_value=max_date + timedelta(days=365),
             )
+    
+            if len(date_range) == 2:
+                start, end = date_range
+                date_list = []
+                current = start
+    
+                while current <= end:
+                    date_list.append(current.strftime("%d.%m"))
+                    current += timedelta(days=1)
+    
+                selected_dates = date_list
+                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
+    
+            else:
+                selected_dates = all_dates_short
+                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
+    
+            selected_date = None
+    
+        else:
+    
+            if "hourly_date_index" not in st.session_state:
+                st.session_state.hourly_date_index = 0
+    
+            if all_dates_full:
+                st.session_state.hourly_date_index = max(
+                    0,
+                    min(
+                        st.session_state.hourly_date_index,
+                        len(all_dates_full) - 1,
+                    ),
+                )
+    
+                selected_date = st.selectbox(
+                    "Дата:",
+                    all_dates_full,
+                    index=st.session_state.hourly_date_index,
+                )
+    
+                st.session_state.hourly_date_index = all_dates_full.index(selected_date)
+        
+                selected_dates = []
+                date_range_label = selected_date
 
-        selected_date = st.selectbox(
-            "Дата:",
-            all_dates_full,
-            index=st.session_state.hourly_date_index,
-            key="hourly_date_select",
-        )
-
-        st.session_state.hourly_date_index = (
-            all_dates_full.index(selected_date)
-        )
-
-        selected_dates = []
-        date_range_label = selected_date
-
-    st.divider()
-
-    st.markdown("**🩺 Специализации:**")
-
-    for spec in sorted(colors.keys()):
-        if spec in ("Пусто", "Нет данных", "Администрация"):
-            continue
-
-        color = colors.get(spec, "#999")
-
+        st.markdown("**🩺 Специализации:**")
+        for spec in sorted(colors.keys()):
+            if spec in ('Пусто', 'Нет данных', 'Администрация'):
+                continue
+            color = colors.get(spec, '#999')
+            st.markdown(
+                f"<span style='display:inline-block; width:12px; height:12px; "
+                f"background:{color}; border-radius:2px; margin-right:6px;'>"
+                f"</span>{spec}",
+                unsafe_allow_html=True,
+            )
         st.markdown(
-            f"<span style='display:inline-block;width:12px;height:12px;"
-            f"background:{color};border-radius:2px;margin-right:6px;'></span>{spec}",
+            f"<span style='display:inline-block; width:12px; height:12px; "
+            f"background:{colors.get('Пусто', '#999')}; border-radius:2px; margin-right:6px;'>"
+            f"</span>Пусто",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"<span style='display:inline-block; width:12px; height:12px; "
+            f"background:{colors.get('Нет данных', '#999')}; border-radius:2px; margin-right:6px;'>"
+            f"</span>Нет данных",
             unsafe_allow_html=True,
         )
 
-    st.markdown(
-        f"<span style='display:inline-block;width:12px;height:12px;"
-        f"background:{colors.get('Пусто','#999')};border-radius:2px;margin-right:6px;'></span>Пусто",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        f"<span style='display:inline-block;width:12px;height:12px;"
-        f"background:{colors.get('Нет данных','#999')};border-radius:2px;margin-right:6px;'></span>Нет данных",
-        unsafe_allow_html=True,
-    )
 
     if mode == "📅 Обзор по периодам":
         if not selected_dates:
