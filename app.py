@@ -480,53 +480,66 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
             #     if y_bottom > y1_cell:
             #         y_bottom = y1_cell
 
-                total_hours = sum(spec_hours.values())
+            total_hours = sum(spec_hours.values())
 
-# ============================================================
-# ЗАГРУЖЕННОСТЬ:
-# 12 часов = 100%
-# 08:00–20:00 = нормативная максимальная загрузка.
-# Всё сверх 12 часов НЕ увеличивает заполнение ячейки.
-# ============================================================
-filled_hours = min(total_hours, MAX_HOURS)
-filled_ratio = filled_hours / MAX_HOURS
-empty_ratio = 1.0 - filled_ratio
+            # ============================================================
+            # ЗАГРУЖЕННОСТЬ:
+            # 12 часов = 100%
+            # Нормативный интервал: 08:00–20:00
+            # Всё, что больше 12 часов, не увеличивает заполнение.
+            # ============================================================
+            filled_hours = min(total_hours, MAX_HOURS)
+            filled_ratio = filled_hours / MAX_HOURS
+            empty_ratio = 1.0 - filled_ratio
 
-# Рисуем сектора специализаций внутри заполненной части
-current_y = y0_cell
-period_parts = []
-doctor_parts = []
-spec_parts = []
+            # Рисуем сектора специализаций внутри заполненной части
+            current_y = y0_cell
+            period_parts = []
+            doctor_parts = []
+            spec_parts = []
 
-for sp, hrs in spec_hours.items():
+            for sp, hrs in spec_hours.items():
 
-    # Доля специализации от ФАКТИЧЕСКОГО заполненного времени.
-    # Важно: если всего > 12 часов, вся ячейка всё равно = 100%.
-    if total_hours > 0:
-        ratio = (hrs / total_hours) * filled_ratio
-    else:
-        ratio = 0.0
+                # Доля данной специализации от общего фактического времени.
+                # Например:
+                # 6 ч из 12 ч -> 50% заполненной части
+                # 8 ч из 16 ч -> 50% заполненной части
+                #
+                # При этом сама ячейка ограничена максимумом 12 часов.
+                if total_hours > 0:
+                    ratio = (hrs / total_hours) * filled_ratio
+                else:
+                    ratio = 0.0
 
-    y_bottom = current_y + ratio
+                y_bottom = current_y + ratio
 
-    if y_bottom > y1_cell:
-        y_bottom = y1_cell
+                if y_bottom > y1_cell:
+                    y_bottom = y1_cell
 
                 shapes.append(dict(
                     type='rect',
-                    x0=x0, x1=x1, y0=current_y, y1=y_bottom,
+                    x0=x0,
+                    x1=x1,
+                    y0=current_y,
+                    y1=y_bottom,
                     fillcolor=colors.get(sp, '#999'),
                     line=dict(width=0),
                     layer='above'
                 ))
 
                 current_y = y_bottom
-                period_parts.append(f"{sp}: {'; '.join(dict.fromkeys(spec_periods[sp]))}")
+
+                period_parts.append(
+                    f"{sp}: {'; '.join(dict.fromkeys(spec_periods[sp]))}"
+                )
+
                 docs = ', '.join(dict.fromkeys(spec_doctors[sp]))
                 doctor_parts.append(f"{sp}: {docs}")
+
                 spec_parts.append(f"{sp} ({hrs:.1f}ч)")
 
             # Остаток — серый (Пусто)
+            
             if empty_ratio > 0.001:
                 shapes.append(dict(
                     type='rect',
