@@ -201,7 +201,11 @@ def normalize_spec(raw):
             return val
 
     # 4) Fallback: нормализованная подстрока, от длинных ключей к коротким
-    for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+    # for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+    #     if _norm_for_match(key) in s_norm:
+    #         return val
+        # ИСПРАВЛЕНО: Сортируем по реальной длине нормализованной подстроки (len(_norm_for_match(x[0])))
+    for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(_norm_for_match(x[0])), reverse=True):
         if _norm_for_match(key) in s_norm:
             return val
 
