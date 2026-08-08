@@ -458,27 +458,59 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
                 spec_periods.setdefault(sp, []).append(str(r['Период']))
                 spec_doctors.setdefault(sp, []).append(r['doctor_initials'])
 
-            total_hours = sum(spec_hours.values())
-            # Нормируем: 12ч = 100% высоты ячейки
-            filled_ratio = min(total_hours / MAX_HOURS, 1.0)
-            empty_ratio = 1.0 - filled_ratio
+            # total_hours = sum(spec_hours.values())
+            # # Нормируем: 12ч = 100% высоты ячейки
+            # filled_ratio = min(total_hours / MAX_HOURS, 1.0)
+            # empty_ratio = 1.0 - filled_ratio
 
-            # Рисуем сектора сверху вниз
-            current_y = y0_cell
-            period_parts = []
-            doctor_parts = []
-            spec_parts = []
+            # # Рисуем сектора сверху вниз
+            # current_y = y0_cell
+            # period_parts = []
+            # doctor_parts = []
+            # spec_parts = []
 
-            for sp, hrs in spec_hours.items():
-                ratio = (hrs / MAX_HOURS) if total_hours > 0 else 0
-                ratio = min(ratio, 1.0)
-                if filled_ratio > 0:
-                    ratio = ratio / (total_hours / MAX_HOURS) * filled_ratio
-                else:
-                    ratio = 0
-                y_bottom = current_y + ratio
-                if y_bottom > y1_cell:
-                    y_bottom = y1_cell
+            # for sp, hrs in spec_hours.items():
+            #     ratio = (hrs / MAX_HOURS) if total_hours > 0 else 0
+            #     ratio = min(ratio, 1.0)
+            #     if filled_ratio > 0:
+            #         ratio = ratio / (total_hours / MAX_HOURS) * filled_ratio
+            #     else:
+            #         ratio = 0     
+            #     y_bottom = current_y + ratio
+            #     if y_bottom > y1_cell:
+            #         y_bottom = y1_cell
+
+                total_hours = sum(spec_hours.values())
+
+# ============================================================
+# ЗАГРУЖЕННОСТЬ:
+# 12 часов = 100%
+# 08:00–20:00 = нормативная максимальная загрузка.
+# Всё сверх 12 часов НЕ увеличивает заполнение ячейки.
+# ============================================================
+filled_hours = min(total_hours, MAX_HOURS)
+filled_ratio = filled_hours / MAX_HOURS
+empty_ratio = 1.0 - filled_ratio
+
+# Рисуем сектора специализаций внутри заполненной части
+current_y = y0_cell
+period_parts = []
+doctor_parts = []
+spec_parts = []
+
+for sp, hrs in spec_hours.items():
+
+    # Доля специализации от ФАКТИЧЕСКОГО заполненного времени.
+    # Важно: если всего > 12 часов, вся ячейка всё равно = 100%.
+    if total_hours > 0:
+        ratio = (hrs / total_hours) * filled_ratio
+    else:
+        ratio = 0.0
+
+    y_bottom = current_y + ratio
+
+    if y_bottom > y1_cell:
+        y_bottom = y1_cell
 
                 shapes.append(dict(
                     type='rect',
