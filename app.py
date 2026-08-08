@@ -937,11 +937,11 @@ def main():
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
-    mode = st.radio(
-        "Режим:",
-        ["⏰ Детально по часам", "📅 Обзор по периодам"],
-        index=0,
-    )
+        mode = st.radio(
+            "Режим:",
+            ["⏰ Детально по часам", "📅 Обзор по периодам"],
+            index=0,
+        )
     
     all_dates_full = df.sort_values("date_parsed")["date_str"].unique().tolist()
     all_dates_short = df.sort_values("date_parsed")["date_short"].unique().tolist()
@@ -994,19 +994,20 @@ def main():
                 ),
             )
     
-        selected_date = st.selectbox(
-            "Дата:",
-            all_dates_full,
-            index=st.session_state.hourly_date_index,
-        )
+            selected_date = st.selectbox(
+                "Дата:",
+                all_dates_full,
+                index=st.session_state.hourly_date_index,
+            )
     
-        st.session_state.hourly_date_index = all_dates_full.index(selected_date)
-    
-        selected_dates = []
-        date_range_label = selected_date
+            st.session_state.hourly_date_index = all_dates_full.index(selected_date)
+        
+            selected_dates = []
+            date_range_label = selected_date
 
 
-        st.divider()
+            st.divider()
+            
         st.markdown("**🩺 Специализации:**")
         for spec in sorted(colors.keys()):
             if spec in ('Пусто', 'Нет данных', 'Администрация'):
