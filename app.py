@@ -949,17 +949,9 @@ def main():
             index=0,
         )
 
-        selected_specs = st.multiselect(
-            "Фильтр по специализациям:",
-            options=available_specs,
-            default=available_specs,
-            placeholder="Все специализации",
-            help="Можно выбрать одну или несколько специализаций. По умолчанию выбраны все.",
-        )
-
+        # Фильтр по специализациям размещён ниже — сразу после выбора даты.
         # Фильтр применяется до построения любого из двух графиков.
-        df_filtered = df[df['spec'].isin(selected_specs)].copy()
-    
+        
         all_dates_full = df.sort_values("date_parsed")["date_str"].unique().tolist()
         all_dates_short = df.sort_values("date_parsed")["date_short"].unique().tolist()
     
@@ -1021,6 +1013,33 @@ def main():
         
                 selected_dates = []
                 date_range_label = selected_date
+
+        # Компактный фильтр по специализациям.
+        # По умолчанию включены все специализации, поэтому sidebar не
+        # заполняется длинным списком тегов. При снятии флажка появляется
+        # обычный multiselect для выбора одной или нескольких специализаций.
+        st.markdown("**Фильтр по специализациям:**")
+
+        show_all_specs = st.checkbox(
+            "Все специализации",
+            value=True,
+            key="all_specs_filter",
+        )
+
+        if show_all_specs:
+            selected_specs = available_specs.copy()
+        else:
+            selected_specs = st.multiselect(
+                "Выберите специализации:",
+                options=available_specs,
+                default=[],
+                placeholder="Выберите одну или несколько...",
+                key="selected_specs_filter",
+                help="Выберите одну или несколько специализаций для отображения.",
+            )
+
+        # Фильтр применяется до построения любого из двух графиков.
+        df_filtered = df[df['spec'].isin(selected_specs)].copy()
 
         st.divider()
         st.markdown("**🩺 Легенда:**")
