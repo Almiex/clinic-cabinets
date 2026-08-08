@@ -937,81 +937,67 @@ def main():
     with st.sidebar:
         st.header("⚙️ Фильтры")
 
-        mode = st.radio(
-            "Режим:",
-            ["⏰ Детально по часам", "📅 Обзор по периодам"],
-            index=0,
-        )
+mode = st.radio(
+    "Режим:",
+    ["⏰ Детально по часам", "📅 Обзор по периодам"],
+    index=0,
+)
 
-        all_dates_full = df.sort_values('date_parsed')['date_str'].unique().tolist()
-        all_dates_short = df.sort_values('date_parsed')['date_short'].unique().tolist()
+all_dates_full = df.sort_values("date_parsed")["date_str"].unique().tolist()
+all_dates_short = df.sort_values("date_parsed")["date_short"].unique().tolist()
 
-        if mode == "📅 Обзор по периодам":
-            if len(all_dates_full) > 0:
-                min_date = datetime.strptime(all_dates_full[0], '%d.%m.%Y').date()
-                max_date = datetime.strptime(all_dates_full[-1], '%d.%m.%Y').date()
-            else:
-                min_date = datetime.now().date()
-                max_date = datetime.now().date()
+if mode == "📅 Обзор по периодам":
 
-            date_range = st.date_input(
-                "Выберите диапазон:",
-                value=(min_date, max_date),
-                min_value=min_date - timedelta(days=365),
-                max_value=max_date + timedelta(days=365),
-            )
-            if len(date_range) == 2:
-                start, end = date_range
-                date_list = []
-                current = start
-                while current <= end:
-                    date_list.append(current.strftime('%d.%m'))
-                    current += timedelta(days=1)
-                selected_dates = date_list
-                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
-            else:
-                selected_dates = all_dates_short[-7:]
-                date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
-            selected_date = None
-        # else:
-        #     selected_date = st.selectbox("Дата:", all_dates_full)
-        #     selected_dates = []
-        #     date_range_label = selected_date
+    if len(all_dates_full) > 0:
+        min_date = datetime.strptime(all_dates_full[0], "%d.%m.%Y").date()
+        max_date = datetime.strptime(all_dates_full[-1], "%d.%m.%Y").date()
+    else:
+        min_date = datetime.now().date()
+        max_date = datetime.now().date()
 
-        else:
-            # Индекс текущей даты для навигации по дням
-            if 'hourly_date_index' not in st.session_state:
-                st.session_state.hourly_date_index = 0
+    date_range = st.date_input(
+        "Выберите диапазон:",
+        value=(min_date, max_date),
+        min_value=min_date - timedelta(days=365),
+        max_value=max_date + timedelta(days=365),
+    )
 
-            # Защита от выхода за границы после загрузки другого файла
-            if all_dates_full:
-                st.session_state.hourly_date_index = max(
-                    0,
-                    min(
-                        st.session_state.hourly_date_index,
-                        len(all_dates_full) - 1
-                    )
-                )
+    if len(date_range) == 2:
+        start, end = date_range
+        date_list = []
+        current = start
 
-     else:
-    # Индекс текущей даты для навигации по дням
-    if 'hourly_date_index' not in st.session_state:
+        while current <= end:
+            date_list.append(current.strftime("%d.%m"))
+            current += timedelta(days=1)
+
+        selected_dates = date_list
+        date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
+
+    else:
+        selected_dates = all_dates_short
+        date_range_label = f"{selected_dates[0]} – {selected_dates[-1]}"
+
+    selected_date = None
+
+else:
+
+    if "hourly_date_index" not in st.session_state:
         st.session_state.hourly_date_index = 0
 
-    # Защита от выхода за границы после загрузки другого файла
     if all_dates_full:
         st.session_state.hourly_date_index = max(
             0,
             min(
                 st.session_state.hourly_date_index,
-                len(all_dates_full) - 1
-            )
+                len(all_dates_full) - 1,
+            ),
         )
 
     selected_date = st.selectbox(
         "Дата:",
         all_dates_full,
-        index=st.session_state.hourly_date_index
+        index=st.session_state.hourly_date_index,
     )
 
     st.session_state.hourly_date_index = all_dates_full.index(selected_date)
