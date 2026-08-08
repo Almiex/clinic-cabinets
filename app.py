@@ -1014,28 +1014,33 @@ def main():
                 selected_dates = []
                 date_range_label = selected_date
 
-        # Компактный фильтр по специализациям.
-        # По умолчанию включены все специализации, поэтому sidebar не
-        # заполняется длинным списком тегов. При снятии флажка появляется
-        # обычный multiselect для выбора одной или нескольких специализаций.
-        st.markdown("**Фильтр по специализациям:**")
-
-        show_all_specs = st.checkbox(
-            "Все специализации",
-            value=True,
-            key="all_specs_filter",
-        )
-
-        if show_all_specs:
-            selected_specs = available_specs.copy()
+        # Свернутый фильтр по специализациям.
+        # По умолчанию внутри выбраны ВСЕ специализации. При открытии
+        # expander список остаётся полностью выбранным, а пользователь
+        # может снять только нужные специализации. Выбор сохраняется
+        # между перерисовками и при переключении режимов графика.
+        if "selected_specs_filter" not in st.session_state:
+            st.session_state.selected_specs_filter = available_specs.copy()
         else:
+            # Убираем из сохранённого выбора только специализации,
+            # которых больше нет в текущих данных.
+            st.session_state.selected_specs_filter = [
+                spec for spec in st.session_state.selected_specs_filter
+                if spec in available_specs
+            ]
+
+            # Если список стал пустым после изменения данных,
+            # возвращаем выбор всех специализаций.
+            if not st.session_state.selected_specs_filter and available_specs:
+                st.session_state.selected_specs_filter = available_specs.copy()
+
+        with st.expander("Фильтр по специализациям", expanded=False):
             selected_specs = st.multiselect(
                 "Выберите специализации:",
                 options=available_specs,
-                default=[],
-                placeholder="Выберите одну или несколько...",
                 key="selected_specs_filter",
-                help="Выберите одну или несколько специализаций для отображения.",
+                placeholder="Выберите одну или несколько...",
+                help="По умолчанию выбраны все специализации. Снимите отметки только с тех, которые не нужно отображать.",
             )
 
         # Фильтр применяется до построения любого из двух графиков.
