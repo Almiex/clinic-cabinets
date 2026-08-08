@@ -191,23 +191,37 @@ def assign_colors(all_specs):
 def normalize_cabinet(raw):
     if pd.isna(raw):
         return None
+
     s = str(raw).strip()
+
     if not s:
         return None
-    if re.match(r'^\\d+\\.0$', s):
+
+    # Excel может отдавать номер кабинета как "12.0"
+    if re.match(r'^\d+\.0$', s):
         return str(int(float(s)))
-    m = re.search(r'(\\d+)[-\\.](\\d+)$', s)
+
+    # Форматы вроде 12.01 / 12-01
+    m = re.search(r'(\d+)[-\.](\d+)$', s)
+
     if m:
         left, right = m.group(1), m.group(2)
+
         if len(right) == 2 and len(left) <= 2:
             return f"{left}{right}"
+
+    # Обычное числовое значение
     try:
         val = float(s)
+
         if val == int(val):
             return str(int(val))
+
         return str(val)
-    except ValueError:
+
+    except (ValueError, TypeError):
         pass
+
     return s
 
 
@@ -312,11 +326,23 @@ def parse_excel_new(file_bytes):
     df['date_short'] = df['date_parsed'].dt.strftime('%d.%m')
 
     def parse_period(p):
-        m = re.match(r'(\\d{1,2}):(\\d{2})\\s*-\\s*(\\d{1,2}):(\\d{2})', str(p))
-        if m:
-            h1, m1, h2, m2 = map(int, m.groups())
-            return time(h1, m1), time(h2, m2)
-        return None, None
+        if pd.isna(p):
+            return None, None
+
+        s = str(p).strip()
+        s = s.replace('–', '-').replace('—', '-')
+
+        m = re.match(
+            r'^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$',
+            s
+        )
+
+        if not m:
+            return None, None
+
+        h1, m1, h2, m2 = map(int, m.groups())
+
+        return time(h1, m1), time(h2, m2)
 
     df[['start_time', 'end_time']] = df['Период'].apply(
         lambda x: pd.Series(parse_period(x))
