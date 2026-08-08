@@ -186,7 +186,11 @@ def normalize_spec(raw):
     if s_lower in SPEC_MAP:
         return SPEC_MAP[s_lower]
 
-    # 2) Exact match по первой части до запятой
+    # # 2) Exact match по первой части до запятой
+    # first_part = s.split(',')[0].strip().lower()
+    # if first_part in SPEC_MAP:
+    #     return SPEC_MAP[first_part]
+
     first_part = s.split(',')[0].strip().lower()
     if first_part in SPEC_MAP:
         return SPEC_MAP[first_part]
