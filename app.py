@@ -122,41 +122,25 @@ EXTRA_PALETTE = [
 def normalize_spec(raw):
     if pd.isna(raw):
         return 'Прочее'
+    s = str(raw).strip()
+    s_lower = s.lower()
 
-    s = str(raw).strip().lower()
+    # 1) Exact match по полной строке
+    if s_lower in SPEC_MAP:
+        return SPEC_MAP[s_lower]
 
-    # Нормализуем пробелы вокруг запятых.
-    s = re.sub(r'\s+', ' ', s)
-    s = re.sub(r'\s*,\s*', ', ', s).strip()
+    # 2) Exact match по первой части до запятой
+    first_part = s.split(',')[0].strip().lower()
+    if first_part in SPEC_MAP:
+        return SPEC_MAP[first_part]
 
-    # 1. Сначала точное совпадение всей строки.
-    # Явное правило SPEC_MAP имеет максимальный приоритет.
-    for key, val in SPEC_MAP.items():
-        if s == key.lower():
-            return val
-
-    # 2. Затем проверяем первую специальность до запятой.
-    # Например:
-    # "травматолог-ортопед, хирург(кво)" -> "травматолог-ортопед"
-    # "колопроктолог, хирург" -> "колопроктолог"
-    first_part = s.split(',', 1)[0].strip()
-    for key, val in SPEC_MAP.items():
-        if first_part == key.lower():
-            return val
-
-    # 3. Fallback: длинные ключи проверяем раньше коротких.
-    # Это не позволяет общему ключу "хирург" перехватывать
-    # более специфичные специализации.
-    for key, val in sorted(
-        SPEC_MAP.items(),
-        key=lambda item: len(item[0]),
-        reverse=True
-    ):
-        if key.lower() in s:
+    # 3) Fallback: подстрока, но от длинных ключей к коротким
+    #    (чтобы «колопроктолог, хирург» всегда побеждал «хирург»)
+    for key, val in sorted(SPEC_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+        if key in s_lower:
             return val
 
     return 'Прочее'
-
 
 
 def get_display_name(full_name):
@@ -488,28 +472,6 @@ def create_overview_heatmap(df, selected_cabinets, selected_dates, colors):
                 spec_hours[sp] = spec_hours.get(sp, 0.0) + r['hours']
                 spec_periods.setdefault(sp, []).append(str(r['Период']))
                 spec_doctors.setdefault(sp, []).append(r['doctor_initials'])
-
-            # total_hours = sum(spec_hours.values())
-            # # Нормируем: 12ч = 100% высоты ячейки
-            # filled_ratio = min(total_hours / MAX_HOURS, 1.0)
-            # empty_ratio = 1.0 - filled_ratio
-
-            # # Рисуем сектора сверху вниз
-            # current_y = y0_cell
-            # period_parts = []
-            # doctor_parts = []
-            # spec_parts = []
-
-            # for sp, hrs in spec_hours.items():
-            #     ratio = (hrs / MAX_HOURS) if total_hours > 0 else 0
-            #     ratio = min(ratio, 1.0)
-            #     if filled_ratio > 0:
-            #         ratio = ratio / (total_hours / MAX_HOURS) * filled_ratio
-            #     else:
-            #         ratio = 0     
-            #     y_bottom = current_y + ratio
-            #     if y_bottom > y1_cell:
-            #         y_bottom = y1_cell
 
             total_hours = sum(spec_hours.values())
 
@@ -997,46 +959,11 @@ def main():
                 min_date = datetime.now().date()
                 max_date = datetime.now().date()
     
-            date_min_allowed = min_date - timedelta(days=365)
-            date_max_allowed = max_date + timedelta(days=365)
-            default_date_range = (min_date, max_date)
-
-            # Стабильный key сохраняет выбор пользователя между rerun.
-            # Это устраняет сброс даты после первого клика.
-            if "overview_date_range" not in st.session_state:
-                st.session_state.overview_date_range = default_date_range
-            else:
-                saved_range = st.session_state.overview_date_range
-
-                # При смене загруженного файла старый диапазон может
-                # оказаться вне новых допустимых границ.
-                if isinstance(saved_range, (list, tuple)) and len(saved_range) == 2:
-                    saved_start, saved_end = saved_range
-
-                    saved_start = max(
-                        date_min_allowed,
-                        min(saved_start, date_max_allowed)
-                    )
-                    saved_end = max(
-                        date_min_allowed,
-                        min(saved_end, date_max_allowed)
-                    )
-
-                    if saved_start > saved_end:
-                        saved_start, saved_end = default_date_range
-
-                    st.session_state.overview_date_range = (
-                        saved_start,
-                        saved_end
-                    )
-                else:
-                    st.session_state.overview_date_range = default_date_range
-
             date_range = st.date_input(
                 "Выберите диапазон:",
-                min_value=date_min_allowed,
-                max_value=date_max_allowed,
-                key="overview_date_range",
+                value=(min_date, max_date),
+                min_value=min_date - timedelta(days=365),
+                max_value=max_date + timedelta(days=365),
             )
     
             if len(date_range) == 2:
@@ -1070,11 +997,14 @@ def main():
                         len(all_dates_full) - 1,
                     ),
                 )
-    
+
+                # FIX #2: добавлен key, чтобы Streamlit корректно отслеживал
+                # состояние виджета между reruns при выборе новой даты
                 selected_date = st.selectbox(
                     "Дата:",
                     all_dates_full,
                     index=st.session_state.hourly_date_index,
+                    key="hourly_date_selectbox",
                 )
     
                 st.session_state.hourly_date_index = all_dates_full.index(selected_date)
